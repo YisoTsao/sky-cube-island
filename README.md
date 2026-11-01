@@ -11,6 +11,7 @@ npm install
 npm run dev      # http://localhost:5173
 npm run build    # 產出 dist/
 npm test         # 單元與整合測試
+npm run e2e      # 需先 build：瀏覽器冒煙測試（建塔、復原、開波、結算）
 npm run typecheck && npm run lint
 ```
 
