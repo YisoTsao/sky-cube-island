@@ -110,10 +110,12 @@ export class RenderPipeline {
       ao.configuration.aoRadius = 1.4;
       ao.configuration.distanceFalloff = 0.6;
       ao.configuration.intensity = 2.2;
-      ao.configuration.halfRes = p.ssao === 'half';
+      // n8ao 2.0.1's half-res path uses an MRT target whose `texture` getter returns an array,
+      // which three r18x's setupRenderTarget can't handle → always render full res, fewer samples instead.
+      ao.configuration.halfRes = false;
       ao.configuration.gammaCorrection = false;
-      ao.configuration.aoSamples = p.ssao === 'half' ? 12 : 16;
-      ao.configuration.denoiseSamples = 6;
+      ao.configuration.aoSamples = p.ssao === 'half' ? 8 : 16;
+      ao.configuration.denoiseSamples = p.ssao === 'half' ? 4 : 8;
       ao.configuration.color.set(0x1d2740);
       this.composer.addPass(ao as unknown as RenderPass);
       this.ao = ao;
