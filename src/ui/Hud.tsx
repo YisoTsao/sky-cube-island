@@ -531,6 +531,7 @@ export function SettingsPanel() {
             <div className="set-hint">目前：{qName[qualityLabel] ?? qualityLabel}</div>
             <Toggle label="動態解析度" value={s.dynamicResolution} onChange={(v) => update({ dynamicResolution: v })} />
             <Toggle label="傷害數字" value={s.damageNumbers} onChange={(v) => update({ damageNumbers: v })} />
+            <Toggle label="滑鼠移到邊緣捲動地圖" value={s.edgeScroll} onChange={(v) => update({ edgeScroll: v })} />
             <Slider label="UI 大小" value={s.uiScale} min={0.8} max={1.3} onChange={(v) => update({ uiScale: v })} />
           </section>
           <section>

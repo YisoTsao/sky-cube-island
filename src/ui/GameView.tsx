@@ -8,6 +8,7 @@ import { useUi } from '../state/store';
 import { audio } from '../audio/audio';
 import type { Tool } from '../presentation/feed';
 import { TouchGestures, pinchToWheelDelta } from './touch-gestures';
+import { edgeScrollVector } from './edge-scroll';
 
 const params = new URLSearchParams(location.search);
 /** A confirming touch tap within this distance of the previewed cell counts as the same cell. */
@@ -113,6 +114,25 @@ export function GameView() {
       useUi.getState().set({ introPlaying: true });
     }
 
+    // ---- edge scrolling (desktop mouse) ----------------------------------------
+    // Tracked on window so HUD panels near the edge don't swallow it; buttons and open menus
+    // suppress it so reaching for a HUD control doesn't drift the map.
+    const edgeMouse = { x: 0, y: 0, inside: false, overUi: false };
+    const edgeScrollStep = (dt: number) => {
+      const u = useUi.getState();
+      if (!edgeMouse.inside || edgeMouse.overUi || dragging || u.touchUi || !u.settings.edgeScroll) return;
+      if (scene.introPlaying || u.pauseOpen || u.settingsOpen || u.helpOpen || !document.hasFocus()) return;
+      const v = edgeScrollVector(edgeMouse.x, edgeMouse.y, canvas.getBoundingClientRect());
+      scene.rig.edgeScroll(v.x, v.y, dt);
+    };
+    const onWindowMove = (ev: PointerEvent) => {
+      if (ev.pointerType !== 'mouse') { edgeMouse.inside = false; return; }
+      edgeMouse.x = ev.clientX; edgeMouse.y = ev.clientY; edgeMouse.inside = true;
+      edgeMouse.overUi = !!(ev.target as Element | null)?.closest?.('button, input, select, textarea, a, .modal-wrap');
+    };
+    const onWindowLeave = (ev: MouseEvent) => { if (!ev.relatedTarget) edgeMouse.inside = false; };
+    const onWindowBlur = () => { edgeMouse.inside = false; };
+
     // ---- main loop -------------------------------------------------------------
     let last = performance.now();
     let raf = 0;
@@ -124,6 +144,7 @@ export function GameView() {
       const frameMs = now - last;
       last = now;
       controller.update(dt);
+      edgeScrollStep(dt);
       scene.frame(dt, frameMs, now);
       if (useUi.getState().introPlaying && !scene.introPlaying) useUi.getState().set({ introPlaying: false });
       // portal preview cards follow their portals (2 DOM nodes only)
@@ -337,6 +358,9 @@ export function GameView() {
     }, 16);
 
     canvas.addEventListener('pointermove', onMove);
+    window.addEventListener('pointermove', onWindowMove);
+    document.addEventListener('mouseout', onWindowLeave);
+    window.addEventListener('blur', onWindowBlur);
     canvas.addEventListener('pointerdown', onDown);
     canvas.addEventListener('pointerup', onUp);
     canvas.addEventListener('pointercancel', onCancel);
@@ -366,6 +390,9 @@ export function GameView() {
       ro.disconnect();
       unsub();
       canvas.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointermove', onWindowMove);
+      document.removeEventListener('mouseout', onWindowLeave);
+      window.removeEventListener('blur', onWindowBlur);
       canvas.removeEventListener('pointerdown', onDown);
       canvas.removeEventListener('pointerup', onUp);
       canvas.removeEventListener('pointercancel', onCancel);

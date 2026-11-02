@@ -98,6 +98,8 @@ export const SettingsSchema = z.object({
   reducedMotion: z.boolean(),
   screenShake: z.number().min(0).max(1),
   damageNumbers: z.boolean(),
+  /** Mouse at the screen edge scrolls the map (desktop). Optional so older saved settings still load. */
+  edgeScroll: z.boolean().default(true),
   uiScale: z.number().min(0.8).max(1.5),
   volume: z.object({
     master: z.number().min(0).max(1), music: z.number().min(0).max(1), sfx: z.number().min(0).max(1),

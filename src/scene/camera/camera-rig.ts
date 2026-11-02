@@ -14,8 +14,13 @@ export class CameraRig {
   private yawTo = 0;
   private yawT = 1;
   pitch = MathUtils.degToRad(38);
-  private readonly zoomLevels = [0.8, 1.15, 1.65];
-  zoomIndex = 1;
+  /** Snapped zoom levels, widest first. Index 0 is a strategic overview that fits the whole island. */
+  private readonly zoomLevels = [0.55, 0.8, 1.15, 1.65];
+  static readonly INTRO_ZOOM_INDEX = 1;
+  static readonly DEFAULT_ZOOM_INDEX = 2;
+  /** Widest free (wheel / pinch) zoom. */
+  static readonly MIN_ZOOM = 0.5;
+  zoomIndex = CameraRig.DEFAULT_ZOOM_INDEX;
   private zoom = 1.15;
   private zoomTarget = 1.15;
   private trauma = 0;
@@ -49,7 +54,7 @@ export class CameraRig {
   }
   /** Smooth wheel zoom between snapped levels. */
   zoomBy(delta: number) {
-    this.zoomTarget = MathUtils.clamp(this.zoomTarget * Math.exp(-delta * 0.0015), 0.7, this.maxZoom);
+    this.zoomTarget = MathUtils.clamp(this.zoomTarget * Math.exp(-delta * 0.0015), CameraRig.MIN_ZOOM, this.maxZoom);
     // snap index to nearest
     let best = 0;
     this.zoomLevels.forEach((z, i) => { if (Math.abs(z - this.zoomTarget) < Math.abs(this.zoomLevels[best]! - this.zoomTarget)) best = i; });
@@ -71,6 +76,16 @@ export class CameraRig {
     const fwd = new Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     this.target.addScaledVector(right, dx).addScaledVector(fwd, dz);
     this.clampTarget();
+  }
+  /**
+   * RTS-style edge scroll. `sx`/`sy` are in [-1, 1]: +x scrolls toward screen right, +y toward
+   * screen top. Speed scales with the visible area so it feels the same at every zoom level.
+   */
+  edgeScroll(sx: number, sy: number, dt: number) {
+    if (!sx && !sy) return;
+    const halfH = this.halfHeightBase / this.zoom;
+    const speed = halfH * 1.5; // world units / s at full strength
+    this.panWorld(sx * speed * dt, (sy * speed * dt) / Math.sin(this.pitch));
   }
   private clampTarget() {
     this.target.x = MathUtils.clamp(this.target.x, this.bounds.minX, this.bounds.maxX);
