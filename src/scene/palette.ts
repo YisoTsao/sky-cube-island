@@ -33,6 +33,12 @@ export const PALETTE = {
   knight: 0x5a6fa0, knightDark: 0x3b4a72, knightLight: 0x9fb3dc,
   wisp: 0x9cffb0, wispDeep: 0x3fd07a, wispLeaf: 0x6fd36a,
   boss: 0x6d6670, bossDark: 0x4a444f, bossLava: 0xff6a2a,
+  boar: 0x9a5b3c, boarDark: 0x6e3c27, boarLight: 0xc98a5f, tusk: 0xf4ead2,
+  ghost: 0xcfd8ff, ghostDeep: 0x8c97d8, ghostGlow: 0x9fe8ff,
+  crab: 0x4fc6c0, crabDark: 0x2f8f93, crabCrystal: 0xb48cff,
+  mole: 0x6b5446, moleDark: 0x4a382e, moleNose: 0xff9fb0, claw: 0xe8dcc2,
+  salamander: 0xff5d3a, salamanderDark: 0xc23a22, salamanderBelly: 0xffc25a, flame: 0xffb030,
+  queen: 0x5fd8c0, queenDark: 0x2fa58e, queenLight: 0xb4f5e6,
   eye: 0x1d2333, white: 0xffffff,
   // sky
   skyTop: 0x5aa8ff, skyMid: 0x9fd0ff, skyHorizon: 0xe3f2ff, skyDeep: 0x3f8fe0, cloud: 0xffffff, cloudShade: 0xb2cbec,
@@ -51,7 +57,7 @@ export function pal(key: PaletteKey | number): Color {
 
 /** Tactical-overlay colours (never tone-mapped / graded; GDD §11.3). */
 export const TACTICAL = {
-  routeA: 0xffd34a, routeB: 0x5fd0ff, legal: 0x5cf08a, illegal: 0xff4d5e, select: 0xffffff,
+  routeA: 0xffd34a, routeB: 0x5fd0ff, routeC: 0xff8fd8, legal: 0x5cf08a, illegal: 0xff4d5e, select: 0xffffff,
   rangeVisible: 0x8ff0ff, rangeOccluded: 0xff7a7a, rangeHigh: 0xfff2a0,
   hpGood: 0x66e06a, hpMid: 0xffd34a, hpLow: 0xff5a4f, hpBack: 0x1b1f2a, frost: 0x9ee8ff,
 } as const;

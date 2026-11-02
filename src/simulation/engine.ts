@@ -2,7 +2,9 @@ import type {
   CellId, EnemyInstance, GameEvent, GameState, LevelDef, TowerInstance, Vec3,
 } from '../domain/types';
 import { HEIGHT_STEP_WORLD } from '../domain/types';
-import { ENEMY_DEFS, LEVEL_DAMAGE_MULT, TOWER_DEFS, TPS, starsForHp } from '../domain/definitions';
+import { ENEMY_DEFS, LEVEL_DAMAGE_MULT, TOWER_DEFS, TPS, isBurrowed, isEnraged, starsForHp } from '../domain/definitions';
+
+export { isBurrowed, isEnraged };
 import { deriveMap, type DerivedMap } from '../navigation/derived-map';
 import { distance3D, effectiveRange, hasLineOfSight, towerGeometry } from '../navigation/line-of-sight';
 
@@ -99,7 +101,8 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
     if (e.state !== 'moving') continue;
     const def = ENEMY_DEFS[e.kind];
     const slowRatio = e.slowUntilTick > tick ? (TOWER_DEFS.frost.slow?.ratio ?? 0) * (1 - (def.slowResistance ?? 0)) : 0;
-    e.segmentProgress += (def.speedCellsPerSecond * (1 - slowRatio)) / TPS;
+    const rage = isEnraged(e) ? def.enrage!.speedMult : 1;
+    e.segmentProgress += (def.speedCellsPerSecond * rage * (1 - slowRatio)) / TPS;
     while (e.segmentProgress >= 1 && e.edgeIndex < e.pathNodeIds.length - 1) {
       e.segmentProgress -= 1;
       e.edgeIndex += 1;
@@ -126,7 +129,7 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
     if (age <= 0 || age % aura.everyTicks !== 0) continue;
     const hp = aimPoint(map, h).p;
     for (const o of enemies) {
-      if (o === h || o.state !== 'moving') continue;
+      if (o === h || o.state !== 'moving' || isBurrowed(o, tick)) continue;
       const max = o.maxHp;
       if (o.hp >= max) continue;
       if (distance3D(aimPoint(map, o).p, hp) > aura.radiusWorld) continue;
@@ -148,7 +151,7 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
     const candidates: { e: EnemyInstance; p: Vec3 }[] = [];
     let inRangeCount = 0;
     for (const e of enemies) {
-      if (e.state !== 'moving') continue;
+      if (e.state !== 'moving' || isBurrowed(e, tick)) continue;
       const { p, pose } = aimPoint(map, e);
       const enemyElev = map.elevationOf(pose.nearestCell);
       if (distance3D(geo.origin, p) > effectiveRange(t.kind, t.level, geo.elevation, enemyElev)) continue;
@@ -172,7 +175,7 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
     const victims: EnemyInstance[] = [];
     if (def.blastRadiusWorld) {
       for (const e of enemies) {
-        if (e.state !== 'moving') continue;
+        if (e.state !== 'moving' || isBurrowed(e, tick)) continue;
         if (distance3D(aimPoint(map, e).p, target.p) <= def.blastRadiusWorld) victims.push(e);
       }
       events.push({ type: 'CANNON_EXPLODED', tick, towerId: t.id, at: target.p, hitIds: victims.map((v) => v.id) });
@@ -181,8 +184,9 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
     }
     for (const v of victims) {
       const edef = ENEMY_DEFS[v.kind];
-      const resisted = def.damageType === 'physical' && edef.physicalResistance > 0;
-      const amount = Math.max(0, Math.round(def.baseDamage * LEVEL_DAMAGE_MULT[t.level] * (resisted ? 1 - edef.physicalResistance : 1)));
+      const resist = def.damageType === 'physical' ? edef.physicalResistance : (edef.magicResistance ?? 0);
+      const resisted = resist > 0;
+      const amount = Math.max(0, Math.round(def.baseDamage * LEVEL_DAMAGE_MULT[t.level] * (1 - resist)));
       v.hp = Math.max(0, v.hp - amount);
       events.push({ type: 'ENEMY_DAMAGED', tick, enemyId: v.id, sourceTowerId: t.id, amount, damageType: def.damageType, resisted, hpAfter: v.hp });
       if (def.slow && v.hp > 0) {

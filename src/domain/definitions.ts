@@ -1,4 +1,4 @@
-import type { EnemyDef, EnemyKind, TowerDef, TowerKind, TowerLevel } from './types';
+import type { EnemyDef, EnemyInstance, EnemyKind, TowerDef, TowerKind, TowerLevel } from './types';
 
 /** Fixed simulation rate (Tech §8.1). */
 export const TPS = 20;
@@ -41,6 +41,30 @@ export const ENEMY_DEFS: Record<EnemyKind, EnemyDef> = {
     kind: 'boss', name: '岩王巨像', hp: 1500, speedCellsPerSecond: 0.42, coreDamage: 5, goldReward: 100, physicalResistance: 0.25, targetOffsetWorld: 0.9,
     slowResistance: 0.5, scale: 1.7,
   },
+  // v2.3 roster: each level fields at least ten kinds.
+  boar: {
+    kind: 'boar', name: '狂暴野豬', hp: 200, speedCellsPerSecond: 0.9, coreDamage: 2, goldReward: 7, physicalResistance: 0.1, targetOffsetWorld: 0.42,
+    enrage: { belowRatio: 0.5, speedMult: 1.8 },
+  },
+  ghost: {
+    kind: 'ghost', name: '霧影幽靈', hp: 120, speedCellsPerSecond: 1.15, coreDamage: 1, goldReward: 6, physicalResistance: 0, magicResistance: 0.6, targetOffsetWorld: 0.55,
+  },
+  crab: {
+    kind: 'crab', name: '晶殼蟹', hp: 260, speedCellsPerSecond: 0.7, coreDamage: 2, goldReward: 9, physicalResistance: 0.35, magicResistance: 0.35, targetOffsetWorld: 0.36,
+    scale: 1.1,
+  },
+  mole: {
+    kind: 'mole', name: '鑽地鼴鼠', hp: 150, speedCellsPerSecond: 1.0, coreDamage: 1, goldReward: 6, physicalResistance: 0, targetOffsetWorld: 0.3,
+    burrow: { cycleTicks: 100, underTicks: 40 },
+  },
+  salamander: {
+    kind: 'salamander', name: '焰尾蜥蜴', hp: 140, speedCellsPerSecond: 1.35, coreDamage: 1, goldReward: 6, physicalResistance: 0, magicResistance: 0.25, targetOffsetWorld: 0.28,
+    slowResistance: 1,
+  },
+  queen: {
+    kind: 'queen', name: '史萊姆女王', hp: 1700, speedCellsPerSecond: 0.4, coreDamage: 5, goldReward: 120, physicalResistance: 0.15, targetOffsetWorld: 0.95,
+    slowResistance: 0.5, splitInto: { kind: 'splitter', count: 3 }, scale: 1.9,
+  },
 };
 
 /** GDD §4.4 / §6 terrain economy. */
@@ -77,3 +101,18 @@ export function starsForHp(hp: number): 0 | 1 | 2 | 3 {
   if (hp >= 1) return 1;
   return 0;
 }
+
+/** True while a burrowing enemy is underground (untargetable, immune to blasts and auras). */
+export function isBurrowed(e: Pick<EnemyInstance, 'kind' | 'spawnTick'>, tick: number): boolean {
+  const b = ENEMY_DEFS[e.kind].burrow;
+  if (!b) return false;
+  const age = tick - e.spawnTick;
+  return age > 0 && age % b.cycleTicks >= b.cycleTicks - b.underTicks;
+}
+
+/** True when an enraging enemy has dropped below its HP threshold. */
+export function isEnraged(e: Pick<EnemyInstance, 'kind' | 'hp' | 'maxHp'>): boolean {
+  const r = ENEMY_DEFS[e.kind].enrage;
+  return !!r && e.hp > 0 && e.hp < e.maxHp * r.belowRatio;
+}
+

@@ -227,3 +227,58 @@ describe('Combat-time tower commands', () => {
     expect(executeCommand(level, s, { type: 'BUILD_TOWER', kind: 'arrow', anchorCellId: anchor!.id })).toMatchObject({ ok: false, code: 'ON_ACTIVE_ROUTE' });
   });
 });
+
+describe('Enemy roster v2.3', () => {
+  /** Run until the first damage event lands on an enemy of `kind`. */
+  const firstHit = (s: GameState, kind: EnemyKind) => {
+    for (let i = 0; i < 400; i++) {
+      const t = advanceOneTick(s, level); s = t.state;
+      const hit = t.events.find((e): e is Extract<GameEvent, { type: 'ENEMY_DAMAGED' }> =>
+        e.type === 'ENEMY_DAMAGED' && s.enemies.concat().some((x) => x.id === e.enemyId && x.kind === kind));
+      if (hit) return hit;
+    }
+    throw new Error('no hit');
+  };
+  it('ghosts shrug off most magic damage', () => {
+    let s = combat(apply(fresh(), [{ type: 'BUILD_TOWER', kind: 'frost', anchorCellId: cid(23, 15) }]));
+    s = withEnemy(s, 'ghost', 16);
+    const hit = firstHit(s, 'ghost');
+    expect(hit.resisted).toBe(true);
+    expect(hit.amount).toBe(Math.round(16 * (1 - ENEMY_DEFS.ghost.magicResistance!)));
+  });
+  it('salamanders ignore frost slow entirely', () => {
+    let s = combat(fresh());
+    s = withEnemy(s, 'salamander', 3, { slowUntilTick: 10_000 });
+    const before = s.enemies[0]!.segmentProgress;
+    s = advanceOneTick(s, level).state;
+    expect(s.enemies[0]!.segmentProgress - before).toBeCloseTo(ENEMY_DEFS.salamander.speedCellsPerSecond / 20, 6);
+  });
+  it('boars speed up once below half HP', () => {
+    let s = combat(fresh());
+    s = withEnemy(s, 'boar', 3, { hp: 90, maxHp: 200 });
+    const before = s.enemies[0]!.segmentProgress;
+    s = advanceOneTick(s, level).state;
+    const rage = ENEMY_DEFS.boar.enrage!.speedMult;
+    expect(s.enemies[0]!.segmentProgress - before).toBeCloseTo(ENEMY_DEFS.boar.speedCellsPerSecond * rage / 20, 6);
+  });
+  it('moles cannot be targeted while burrowed', async () => {
+    const { isBurrowed } = await import('../../src/simulation/engine');
+    const b = ENEMY_DEFS.mole.burrow!;
+    let s = combat(apply(fresh(), [{ type: 'BUILD_TOWER', kind: 'arrow', anchorCellId: cid(23, 15) }]));
+    s = withEnemy(s, 'mole', 16, { spawnTick: s.tick - (b.cycleTicks - b.underTicks) });
+    expect(isBurrowed(s.enemies[0]!, s.tick)).toBe(true);
+    for (let i = 0; i < b.underTicks - 1; i++) {
+      const t = advanceOneTick(s, level); s = t.state;
+      expect(t.events.some((e) => e.type === 'TOWER_FIRED')).toBe(false);
+    }
+  });
+  it('the Slime Queen splits into splitters', () => {
+    let s = combat(apply(fresh(), [{ type: 'BUILD_TOWER', kind: 'arrow', anchorCellId: cid(23, 15) }]));
+    s = withEnemy(s, 'queen', 16, { hp: 1 });
+    const events: GameEvent[] = [];
+    for (let i = 0; i < 400 && !events.some((e) => e.type === 'ENEMY_KILLED' && e.kind === 'queen'); i++) {
+      const t = advanceOneTick(s, level); s = t.state; events.push(...t.events);
+    }
+    expect(events.filter((e) => e.type === 'ENEMY_SPAWNED' && e.kind === 'splitter')).toHaveLength(ENEMY_DEFS.queen.splitInto!.count);
+  });
+});

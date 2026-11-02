@@ -8,6 +8,8 @@ import { useUi } from '../state/store';
 import { saveSettings, type SettingsV1 } from '../settings/settings';
 import { audio } from '../audio/audio';
 import { issue, setTool, startWave } from './GameView';
+import { launchLevel } from './launch';
+import { getLevel, nextLevelId } from '../levels/registry';
 import {
   CoinIcon, EnemyIcon, GearIcon, HeartIcon, LowerIcon, PauseIcon, PlayIcon, RaiseIcon, RotateIcon, StarIcon, TowerIcon, UndoIcon, WallIcon,
 } from './icons';
@@ -24,6 +26,12 @@ const ENEMY_TRAIT: Partial<Record<EnemyKind, string>> = {
   knight: '厚甲：物理傷害減半，用冰晶塔的魔法攻擊',
   wisp: '每 2 秒治療身邊的同伴，優先擊倒',
   boss: '最終波頭目，緩速效果減半，漏掉會扣 5 點核心',
+  boar: '血量低於一半時暴怒，速度提升 80%',
+  ghost: '靈體：魔法傷害只吃 40%，用箭塔和砲塔對付',
+  crab: '晶殼同時減免物理與魔法傷害 35%，需要大量火力',
+  mole: '每 5 秒鑽入地底 2 秒，期間無法被攻擊',
+  salamander: '完全無視緩速，跑得很快',
+  queen: '第二關頭目：倒下時分裂成 3 隻分裂史萊姆',
 };
 const ENEMY_NAMES = Object.fromEntries(Object.values(ENEMY_DEFS).map((d) => [d.kind, d.name])) as Record<EnemyKind, string>;
 
@@ -57,7 +65,7 @@ function TopLeft() {
   return (
     <div className="panel hud-topleft">
       <div className="hud-level">
-        <span className="hud-level-tag">L1-01</span>
+        <span className="hud-level-tag">{level.id}</span>
         <span className="hud-level-name">{level.name}</span>
       </div>
       <div className="hud-row">
@@ -453,6 +461,7 @@ function Victory() {
   const stars = useUi((s) => s.stars);
   const hp = useUi((s) => s.coreHp);
   if (phase !== 'VICTORY') return null;
+  const next = nextLevelId(level.id);
   return (
     <div className="modal-wrap soft">
       <div className="panel modal victory">
@@ -463,7 +472,8 @@ function Victory() {
         <div className="victory-sub">守護之心剩餘 {hp} 生命</div>
         <TowerStatsTable />
         <div className="modal-actions">
-          <button className="btn primary big" onClick={() => { controller.newGame(); syncStore(); }}>再玩一次</button>
+          {next && <button className="btn primary big" onClick={() => void launchLevel(next, false)}>下一關：{getLevel(next).name}</button>}
+          <button className={`btn ${next ? '' : 'primary big'}`} onClick={() => { controller.newGame(); syncStore(); }}>再玩一次</button>
           <button className="btn ghost" onClick={() => useUi.getState().set({ screen: 'title' })}>回到標題</button>
         </div>
       </div>

@@ -1,18 +1,44 @@
-import type { GameEvent, GameState } from '../domain/types';
-import { generateL1_01 } from '../levels/l1-01.generator';
+import type { EnemyKind, GameEvent, GameState, LevelDef } from '../domain/types';
+import { getLevel, isLevelId, type LevelId } from '../levels/registry';
 import { validateLevel } from '../levels/level-validator';
-import { GameController } from '../state/game-controller';
+import { recordVictory } from '../persistence/progress';
+import { GameController, type EventListener } from '../state/game-controller';
 import { useUi } from '../state/store';
 import { audio } from '../audio/audio';
 import type { SfxId } from '../audio/sfx-registry';
 import type { SceneApp } from '../scene/scene-app';
 import { loadSettings } from '../settings/settings';
 
-export const level = generateL1_01();
-const validation = validateLevel(level);
-if (!validation.ok) console.error('L1-01 invalid', validation.errors);
+const HEAVY_KINDS = new Set<EnemyKind>(['golem', 'knight', 'boss', 'crab', 'queen', 'boar']);
+const SWIFT_KINDS = new Set<EnemyKind>(['runner', 'wisp', 'ghost', 'salamander', 'mole']);
 
-export const controller = new GameController(level, 1);
+const params = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
+const initialId = params.get('level');
+
+/**
+ * The active level + controller. `export let` keeps ES live bindings, so modules that import
+ * `level` / `controller` always see the current ones after `selectLevel()` (only called while the
+ * game view is unmounted, i.e. from the title screen).
+ */
+export let level: LevelDef = getLevel(initialId && isLevelId(initialId) ? initialId : 'L1-01');
+export let controller: GameController = createController(level);
+useUi.getState().set({ levelId: level.id, levelName: level.name });
+
+function createController(l: LevelDef): GameController {
+  const v = validateLevel(l);
+  if (!v.ok) console.error(`${l.id} invalid`, v.errors);
+  const c = new GameController(l, 1);
+  c.on(onEvents);
+  return c;
+}
+
+/** Switch the active level (title screen only). */
+export function selectLevel(id: LevelId): void {
+  if (level.id === id) return;
+  level = getLevel(id);
+  controller = createController(level);
+  useUi.getState().set({ levelId: id, levelName: level.name });
+}
 
 export const runtime: { scene: SceneApp | null } = { scene: null };
 
@@ -52,7 +78,7 @@ function playAudio(events: GameEvent[], state: GameState) {
         break;
       }
       case 'CANNON_EXPLODED': id = 'explosion'; break;
-      case 'ENEMY_KILLED': id = e.kind === 'golem' || e.kind === 'knight' || e.kind === 'boss' ? 'deathGolem' : e.kind === 'runner' || e.kind === 'wisp' ? 'deathRunner' : 'deathSlime'; break;
+      case 'ENEMY_KILLED': id = HEAVY_KINDS.has(e.kind) ? 'deathGolem' : SWIFT_KINDS.has(e.kind) ? 'deathRunner' : 'deathSlime'; break;
       case 'CORE_DAMAGED': id = 'coreHit'; break;
       case 'TERRAIN_CHANGED': id = e.to > e.from ? 'raise' : 'lower'; break;
       case 'WALL_PLACED': id = 'wallPlace'; break;
@@ -73,7 +99,7 @@ function playAudio(events: GameEvent[], state: GameState) {
   else audio.setMusic('silent');
 }
 
-controller.on((events, ctx) => {
+function onEvents(events: GameEvent[], ctx: Parameters<EventListener>[1]) {
   const ui = useUi.getState();
   runtime.scene?.handleEvents(events, ctx);
   playAudio(events, ctx.state);
@@ -90,14 +116,16 @@ controller.on((events, ctx) => {
       if (e.to === 'COMBAT') ui.set({ tool: { type: 'none' }, preview: null });
       if (e.to === 'PREPARE') ui.set({ failureText: null });
     }
-    if (e.type === 'VICTORY') ui.set({ stars: e.stars, lastWaveStats: controller.waveStats });
+    if (e.type === 'VICTORY') {
+      ui.set({ stars: e.stars, lastWaveStats: controller.waveStats, progress: recordVictory(level.id, e.stars) });
+    }
     if (e.type === 'WAVE_STARTED') {
       const step = useUi.getState().tutorialStep;
       if (step < 4) ui.set({ tutorialStep: 4 });
     }
   }
   if (lowFreq || ctx.fromLoad) syncStore(ctx.state);
-});
+}
 
 export function applyInitialSettings() {
   const s = loadSettings();

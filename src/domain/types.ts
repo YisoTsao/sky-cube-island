@@ -53,8 +53,13 @@ export interface CoreDef {
 }
 
 export type TowerKind = 'arrow' | 'frost' | 'cannon';
-export type EnemyKind = 'slime' | 'runner' | 'golem' | 'mini' | 'splitter' | 'knight' | 'wisp' | 'boss';
-export const ENEMY_KINDS: readonly EnemyKind[] = ['slime', 'runner', 'golem', 'mini', 'splitter', 'knight', 'wisp', 'boss'];
+export type EnemyKind =
+  | 'slime' | 'runner' | 'golem' | 'mini' | 'splitter' | 'knight' | 'wisp' | 'boss'
+  | 'boar' | 'ghost' | 'crab' | 'mole' | 'salamander' | 'queen';
+export const ENEMY_KINDS: readonly EnemyKind[] = [
+  'slime', 'runner', 'golem', 'mini', 'splitter', 'knight', 'wisp', 'boss',
+  'boar', 'ghost', 'crab', 'mole', 'salamander', 'queen',
+];
 
 export interface SpawnEntry {
   enemyKind: EnemyKind;
@@ -81,10 +86,16 @@ export interface LevelDecor {
   flowers: GridPos[];
 }
 
+/** Lighting / sky mood used by the renderer (presentation only). */
+export type LevelTheme = 'day' | 'dusk';
+
 export interface LevelDef {
   schemaVersion: 2;
   id: string;
   name: string;
+  /** Short flavour line for the level-select card. */
+  subtitle?: string;
+  theme?: LevelTheme;
   width: number;
   depth: number;
   heightStepWorld: 0.5;
@@ -122,6 +133,8 @@ export interface EnemyDef {
   coreDamage: number;
   goldReward: number;
   physicalResistance: number;
+  /** 0..1 — fraction of magic (frost) damage ignored. Default 0. */
+  magicResistance?: number;
   targetOffsetWorld: number;
   /** 0..1 — fraction of frost slow ignored (bosses shrug off most of it). */
   slowResistance?: number;
@@ -129,6 +142,10 @@ export interface EnemyDef {
   splitInto?: { kind: EnemyKind; count: number };
   /** Every `everyTicks`, restores `amount` HP (× the wave's hpScale) to other enemies within `radiusWorld`. */
   healAura?: { radiusWorld: number; amount: number; everyTicks: number };
+  /** Below `belowRatio` of max HP the enemy speeds up by `speedMult` (enrage). */
+  enrage?: { belowRatio: number; speedMult: number };
+  /** Spends the last `underTicks` of every `cycleTicks` (counted from spawn) underground: untargetable. */
+  burrow?: { cycleTicks: number; underTicks: number };
   /** Presentation hint: model scale + HP bar width. */
   scale?: number;
 }

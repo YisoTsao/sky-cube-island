@@ -1,15 +1,16 @@
-/** Deterministic balance bots for L1-01 (tests only). */
-import { level, fresh } from '../unit/helpers';
+/** Deterministic balance bots for any level (tests only; defaults to L1-01). */
+import { level as L1 } from '../unit/helpers';
+import { createInitialState } from '../../src/simulation/engine';
 import { executeCommand, resolveTowerFootprint } from '../../src/commands/execute';
 import { advanceOneTick } from '../../src/simulation/engine';
 import { computeRoutes } from '../../src/navigation/connectivity';
 import { deriveMap } from '../../src/navigation/derived-map';
 import { sampleTowerRange } from '../../src/navigation/line-of-sight';
 import { TOWER_DEFS, upgradeCost } from '../../src/domain/definitions';
-import type { GameState, TowerKind } from '../../src/domain/types';
+import type { GameState, LevelDef, TowerKind } from '../../src/domain/types';
 
 /** Best anchor by visible route-cell coverage (both portals' routes). */
-export function bestAnchor(s: GameState, kind: TowerKind): { id: string; score: number } | null {
+export function bestAnchor(s: GameState, kind: TowerKind, level: LevelDef = L1): { id: string; score: number } | null {
   const map = deriveMap(level, s);
   const routesNow = s.phase === 'COMBAT' ? s.frozenRoutes : (() => { const r = computeRoutes(level, s); return r.ok ? r.routes : {}; })();
   const onRoute = new Set(Object.values(routesNow).flat());
@@ -48,7 +49,7 @@ export interface BotOptions {
   spendRatio?: number;
 }
 
-function spend(s: GameState, o: BotOptions): GameState {
+function spend(s: GameState, o: BotOptions, level: LevelDef): GameState {
   const budgetFloor = Math.floor(s.gold * (1 - (o.spendRatio ?? 1)));
   for (let guard = 0; guard < 40; guard++) {
     const kind = o.mix[s.towers.length % o.mix.length]!;
@@ -66,7 +67,7 @@ function spend(s: GameState, o: BotOptions): GameState {
       }
       if (!canBuild) break;
     }
-    const b = bestAnchor(s, kind);
+    const b = bestAnchor(s, kind, level);
     if (!b || b.score < o.minScore) {
       if (up && s.gold - up.cost >= budgetFloor) { const r = executeCommand(level, s, { type: 'UPGRADE_TOWER', towerId: up.t.id }); if (r.ok) { s = r.state; continue; } }
       break;
@@ -81,17 +82,17 @@ function spend(s: GameState, o: BotOptions): GameState {
 export interface WaveReport { wave: number; seconds: number; leaks: number; leakKinds: Record<string, number>; hpAfter: number; goldAfter: number; enemies: number; towers: string }
 export interface RunReport { result: 'VICTORY' | 'DEFEAT'; coreHp: number; waves: WaveReport[] }
 
-export function runBot(o: BotOptions): RunReport {
-  let s = fresh();
+export function runBot(o: BotOptions, level: LevelDef = L1): RunReport {
+  let s = createInitialState(level, 7);
   const waves: WaveReport[] = [];
   for (let w = 0; w < level.waves.length; w++) {
-    s = spend(s, o);
+    s = spend(s, o, level);
     const st = executeCommand(level, s, { type: 'START_WAVE' });
     if (!st.ok) throw new Error(st.message);
     s = st.state;
     let leaks = 0; let ticks = 0; let spawned = 0; const leakKinds: Record<string, number> = {};
     while (s.phase === 'COMBAT') {
-      if (o.combatSpendEvery && ticks > 0 && ticks % o.combatSpendEvery === 0) s = spend(s, o);
+      if (o.combatSpendEvery && ticks > 0 && ticks % o.combatSpendEvery === 0) s = spend(s, o, level);
       const t = advanceOneTick(s, level);
       s = t.state; ticks++;
       for (const e of t.events) { if (e.type === 'ENEMY_REACHED_CORE') { leaks++; leakKinds[e.kind] = (leakKinds[e.kind] ?? 0) + 1; } if (e.type === 'ENEMY_SPAWNED') spawned++; }

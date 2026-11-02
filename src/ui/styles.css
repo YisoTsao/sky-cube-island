@@ -341,6 +341,30 @@ b.bad { color: var(--bad); }
 .title-row { display: flex; gap: 10px; }
 .title-foot { margin-top: 26px; color: rgba(18, 56, 94, .7); font-size: 12px; font-weight: 700; letter-spacing: .1em; }
 
+/* level select */
+.level-select { display: flex; gap: 14px; justify-content: center; margin: 0 auto 20px; max-width: 100%; }
+.level-card {
+  position: relative; display: grid; gap: 3px; justify-items: start; text-align: left; width: 230px; padding: 12px 14px 10px;
+  border-radius: 14px; border: 3px solid var(--wood-2); color: var(--ink); font-family: var(--font); cursor: pointer;
+  background: linear-gradient(180deg, var(--parch-1), var(--parch-2));
+  box-shadow: 0 4px 0 var(--wood-edge), inset 0 2px 0 rgba(255, 255, 255, .8);
+  transition: transform .12s, box-shadow .12s, border-color .12s;
+}
+.level-card::before {
+  content: ''; position: absolute; inset: 0 0 auto 0; height: 6px; border-radius: 10px 10px 0 0;
+  background: linear-gradient(90deg, #8ff07f, #5fb4f0);
+}
+.level-card.theme-dusk::before { background: linear-gradient(90deg, #ffb35c, #c77dff); }
+.level-card:hover:not(:disabled) { transform: translateY(-2px); }
+.level-card.selected { border-color: #1f5a22; box-shadow: 0 4px 0 #1f5a22, 0 0 0 4px rgba(143, 240, 127, .55), inset 0 2px 0 rgba(255, 255, 255, .8); }
+.level-card.locked { cursor: not-allowed; filter: grayscale(.7); opacity: .72; }
+.level-card-id { font: 900 11px/1 var(--font); letter-spacing: .12em; color: var(--ink-soft); margin-top: 4px; }
+.level-card-name { font: 900 19px/1.2 var(--font); }
+.level-card-sub { font: 700 12px/1.3 var(--font); color: var(--ink-soft); }
+.level-card-meta { font: 700 11px/1.3 var(--font); color: #1f6aa0; }
+.level-card-stars { display: flex; gap: 2px; margin-top: 2px; }
+.level-card-lock { position: absolute; top: 10px; right: 12px; font-size: 18px; }
+
 @media (max-width: 900px) {
   .tool-btn { width: 66px; height: 80px; }
   .tool-label { font-size: 10px; }
@@ -472,6 +496,10 @@ b.bad { color: var(--bad); }
   .title-buttons { gap: 8px; }
   .title-buttons .btn.big { padding: 10px 20px; font-size: 16px; }
   .title-foot { display: none; }
+  .level-select { margin-bottom: 10px; gap: 8px; }
+  .level-card { width: 200px; padding: 8px 10px 6px; }
+  .level-card-name { font-size: 16px; }
+  .level-card-meta, .level-card-stars { display: none; }
 }
 
 /* ------------------------------------------------------------------ small screens: modals scroll, ribbon tucks inside */
@@ -500,6 +528,8 @@ b.bad { color: var(--bad); }
   .stars svg { width: 52px; height: 52px; }
   .star.s2 svg { width: 62px; height: 62px; }
   .title-buttons .btn.big { width: min(260px, 78vw); }
+  .level-select { flex-direction: column; align-items: center; }
+  .level-card { width: min(320px, 86vw); }
 }
 
 @media (prefers-reduced-motion: reduce) {

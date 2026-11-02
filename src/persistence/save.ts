@@ -4,8 +4,10 @@ import { SaveFileSchema, type SaveFile } from '../domain/schemas';
 export const GAME_VERSION = '0.1.0';
 const DB_NAME = 'skybound';
 const STORE = 'saves';
-export const saveKey = (slot = 0) => `skybound.v2.save.${slot}`;
-export const checkpointKey = (slot = 0) => `skybound.v2.checkpoint.${slot}`;
+/** L1-01 keeps its original keys so existing saves survive; later levels get their own slots. */
+const levelPart = (levelId: string) => (levelId === 'L1-01' ? '' : `${levelId}.`);
+export const saveKey = (slot = 0, levelId = 'L1-01') => `skybound.v2.save.${levelPart(levelId)}${slot}`;
+export const checkpointKey = (slot = 0, levelId = 'L1-01') => `skybound.v2.checkpoint.${levelPart(levelId)}${slot}`;
 
 function openDb(): Promise<IDBDatabase | null> {
   return new Promise((resolve) => {
@@ -75,12 +77,12 @@ export function parseSave(raw: unknown, levelId: string): GameState | null {
 
 export async function writeSave(state: GameState, slot = 0): Promise<boolean> {
   if (!isSafeSavePoint(state)) return false;
-  return put(saveKey(slot), toSaveFile(state));
+  return put(saveKey(slot, state.levelId), toSaveFile(state));
 }
 export async function writeCheckpoint(state: GameState, slot = 0): Promise<boolean> {
   if (state.phase !== 'PREPARE') return false;
-  return put(checkpointKey(slot), toSaveFile(state));
+  return put(checkpointKey(slot, state.levelId), toSaveFile(state));
 }
-export async function readSave(levelId: string, slot = 0): Promise<GameState | null> { return parseSave(await get(saveKey(slot)), levelId); }
-export async function readCheckpoint(levelId: string, slot = 0): Promise<GameState | null> { return parseSave(await get(checkpointKey(slot)), levelId); }
-export async function clearSave(slot = 0): Promise<void> { await del(saveKey(slot)); await del(checkpointKey(slot)); }
+export async function readSave(levelId: string, slot = 0): Promise<GameState | null> { return parseSave(await get(saveKey(slot, levelId)), levelId); }
+export async function readCheckpoint(levelId: string, slot = 0): Promise<GameState | null> { return parseSave(await get(checkpointKey(slot, levelId)), levelId); }
+export async function clearSave(slot = 0, levelId = 'L1-01'): Promise<void> { await del(saveKey(slot, levelId)); await del(checkpointKey(slot, levelId)); }

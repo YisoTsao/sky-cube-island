@@ -3,7 +3,7 @@ import {
   Color, CanvasTexture, Sprite, SpriteMaterial, type BufferGeometry,
 } from 'three';
 import type { CellId, EnemyInstance, EnemyKind, GameEvent, GameState, LevelDef } from '../domain/types';
-import { ENEMY_DEFS } from '../domain/definitions';
+import { ENEMY_DEFS, isBurrowed, isEnraged } from '../domain/definitions';
 import { HEIGHT_STEP_WORLD } from '../domain/types';
 import type { PreviewInfo, RangeCell, SceneFeed } from '../presentation/feed';
 import { RenderPipeline, QUALITY, type QualityLevel } from './render/pipeline';
@@ -42,6 +42,12 @@ const ENEMY_SHARDS: Record<string, PaletteKey[]> = {
   knight: ['knight', 'knightDark', 'knightLight', 'ironLight'],
   wisp: ['wisp', 'wispDeep', 'wispLeaf'],
   boss: ['boss', 'bossDark', 'gold', 'bossLava'],
+  boar: ['boar', 'boarDark', 'boarLight', 'tusk'],
+  ghost: ['ghost', 'ghostDeep', 'ghostGlow'],
+  crab: ['crab', 'crabDark', 'crabCrystal'],
+  mole: ['mole', 'moleDark', 'claw'],
+  salamander: ['salamander', 'salamanderDark', 'salamanderBelly', 'flame'],
+  queen: ['queen', 'queenLight', 'queenDark', 'gold'],
 };
 const TOWER_SHARDS: Record<string, PaletteKey[]> = {
   arrow: ['wood', 'woodDark', 'plank', 'rock'],
@@ -99,7 +105,7 @@ export class SceneApp {
     this.rig = new CameraRig(center, { minX: 1, maxX: feed.level.width - 1, minZ: 2, maxZ: feed.level.depth - 2 });
     this.overlay = new TacticalOverlay(feed.level, (id) => this.cellWorld(id));
     this.pipeline = new RenderPipeline(canvas, this.scene, this.rig.camera, this.overlay.scene);
-    this.env = new Environment({ center, extent: Math.max(feed.level.width, feed.level.depth) });
+    this.env = new Environment({ center, extent: Math.max(feed.level.width, feed.level.depth), theme: feed.level.theme });
     this.scene.add(this.env.group);
     this.scene.environment = this.env.buildEnvMap(this.pipeline.renderer);
     this.scene.environmentIntensity = 0.55;
@@ -119,7 +125,7 @@ export class SceneApp {
     this.core.group.position.copy(cc);
     this.scene.add(this.core.group);
     for (const p of feed.level.portals) {
-      const pm = new PortalModel(p.id === 'A' ? 'A' : 'B');
+      const pm = new PortalModel(p.id === 'B' ? 'B' : 'A');
       const pos = this.cellWorld(p.cellId);
       pm.group.position.copy(pos);
       // face along the first step of its route
@@ -575,8 +581,8 @@ export class SceneApp {
             const v = this.enemies.get(id);
             if (v) {
               const p = v.group.position.clone().add(new Vector3(0, v.height * 0.5, 0));
-              this.vfx.shatter(p, ENEMY_SHARDS[kind]!, kind === 'boss' ? 80 : kind === 'golem' ? 34 : kind === 'mini' ? 10 : 22, { speed: kind === 'runner' ? 3 : 2.2, up: 2.8 });
-              if (kind === 'boss') this.rig.addTrauma(0.4);
+              this.vfx.shatter(p, ENEMY_SHARDS[kind]!, kind === 'boss' || kind === 'queen' ? 80 : kind === 'golem' || kind === 'crab' ? 34 : kind === 'mini' ? 10 : 22, { speed: kind === 'runner' ? 3 : 2.2, up: 2.8 });
+              if (kind === 'boss' || kind === 'queen') this.rig.addTrauma(0.4);
               this.vfx.sparks(p, 'gold', 6, { speed: 1.2, up: 2 });
               this.hooks.onCoins?.(this.screenOf(p), gold);
               this.scene.remove(v.group);
@@ -710,10 +716,12 @@ export class SceneApp {
       df = Math.atan2(Math.sin(df), Math.cos(df));
       v.group.rotation.y += df * Math.min(1, dt * 10 + 0.05);
       v.slowed = e.slowUntilTick > s.tick;
+      v.burrowed = isBurrowed(e, s.tick);
+      v.enraged = isEnraged(e);
       const maxHp = e.maxHp ?? this.maxHp(e.kind);
       v.hpRatio = e.hp / maxHp;
       v.update(dt, true, v.slowed ? 0.7 : 1);
-      if (e.hp < maxHp) bars.push({ pos: pos.clone().add(new Vector3(0, v.height + 0.3, 0)), ratio: v.hpRatio, slowed: v.slowed, width: e.kind === 'boss' ? 2 : e.kind === 'golem' ? 1.25 : e.kind === 'mini' ? 0.7 : 1 });
+      if (e.hp < maxHp && !v.burrowed) bars.push({ pos: pos.clone().add(new Vector3(0, v.height + 0.3, 0)), ratio: v.hpRatio, slowed: v.slowed, width: e.kind === 'boss' || e.kind === 'queen' ? 2 : e.kind === 'golem' || e.kind === 'crab' ? 1.25 : e.kind === 'mini' ? 0.7 : 1 });
     }
     for (const [id, v] of this.enemies) {
       if (live.has(id)) continue;

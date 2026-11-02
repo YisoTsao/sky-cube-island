@@ -245,9 +245,9 @@ export class TacticalOverlay {
       if (!path || path.length < 2) return;
       const pts = path.map((id) => this.cellPos(id).add(new Vector3(0, 0.1 + i * 0.012, 0)));
       // offset lanes slightly so overlapping routes stay readable
-      const lane = (i === 0 ? -1 : 1) * 0.13;
+      const lane = (i === 0 ? -1 : i === 1 ? 1 : 0) * 0.13;
       const geo = this.ribbon(pts, 0.46, lane);
-      const color = new Color(i === 0 ? TACTICAL.routeA : TACTICAL.routeB);
+      const color = new Color(i === 0 ? TACTICAL.routeA : i === 1 ? TACTICAL.routeB : TACTICAL.routeC);
       const mk = (hidden: boolean) => new ShaderMaterial({
         vertexShader: ROUTE_VERT, fragmentShader: ROUTE_FRAG, transparent: true, depthWrite: false, toneMapped: false, side: DoubleSide,
         depthFunc: hidden ? GreaterDepth : LessEqualDepth,
