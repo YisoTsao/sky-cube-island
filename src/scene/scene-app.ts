@@ -90,7 +90,7 @@ export class SceneApp {
     this.opts = opts;
     this.level = feed.level;
     const center = new Vector3(feed.level.width / 2, 0.5, feed.level.depth / 2 - 0.5);
-    this.rig = new CameraRig(center, { minX: 4, maxX: feed.level.width - 4, minZ: 6, maxZ: feed.level.depth - 6 });
+    this.rig = new CameraRig(center, { minX: 1, maxX: feed.level.width - 1, minZ: 2, maxZ: feed.level.depth - 2 });
     this.overlay = new TacticalOverlay(feed.level, (id) => this.cellWorld(id));
     this.pipeline = new RenderPipeline(canvas, this.scene, this.rig.camera, this.overlay.scene);
     this.env = new Environment({ center, extent: Math.max(feed.level.width, feed.level.depth) });
@@ -382,8 +382,8 @@ export class SceneApp {
   }
 
   /** Intro camera tour (GDD §10.3): orbit + zoom with tilt-shift, skippable. */
-  playIntro() { this.introT = 0; this.rig.zoomIndex = 0; this.rig.snapZoom(); }
-  skipIntro() { if (this.introT >= 0) { this.introT = -1; this.pipeline.setTiltShift(false); this.rig.zoomIndex = 1; this.rig.snapZoom(); } }
+  playIntro() { this.introT = 0; this.rig.zoomIndex = CameraRig.INTRO_ZOOM_INDEX; this.rig.snapZoom(); }
+  skipIntro() { if (this.introT >= 0) { this.introT = -1; this.pipeline.setTiltShift(false); this.rig.zoomIndex = CameraRig.DEFAULT_ZOOM_INDEX; this.rig.snapZoom(); } }
   get introPlaying() { return this.introT >= 0; }
 
   // ---------------------------------------------------------------- entity sync
