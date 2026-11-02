@@ -16,6 +16,12 @@ npm run e2e:mobile # 需先 build：手機尺寸＋觸控模擬（直式、橫�
 npm run typecheck && npm run lint
 ```
 
+## 線上遊玩（GitHub Pages）
+
+https://yisotsao.github.io/sky-cube-island/ （手機瀏覽器可直接開啟）
+
+推送到預設分支時，`.github/workflows/deploy-pages.yml` 會自動建置並部署。首次使用需在 GitHub 儲存庫 **Settings → Pages → Build and deployment → Source** 選擇 **GitHub Actions**。也可在 Actions 頁面手動執行「Deploy to GitHub Pages」。
+
 網址參數（測試／截圖用）：`?nointro` 跳過開場、`?visualTest` 凍結動畫、`?cam=0..3` 旋轉視角、`?quality=low|medium|high|ultra`、`?perf` 顯示效能。
 
 ## 操作
