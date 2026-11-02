@@ -57,4 +57,4 @@ https://yisotsao.github.io/sky-cube-island/ （手機瀏覽器可直接開啟）
 - `src/audio`：程序合成音效與音樂。
 - `src/ui`：React HUD（zustand 低頻狀態）。
 
-設計規格見 `docs/01_GAME_DESIGN_DOCUMENT.md`、`docs/02_TECHNICAL_ARCHITECTURE.md`；實作決策見 `docs/DECISIONS.md`。
+設計規格見 `docs/01_GAME_DESIGN_DOCUMENT.md`、`docs/02_TECHNICAL_ARCHITECTURE.md`；現行塔與怪物數值、等級外觀見 `docs/03_TOWERS_AND_ENEMIES.md`；實作決策見 `docs/DECISIONS.md`。
