@@ -4,6 +4,8 @@
 
 ![準備階段](docs/screenshots/prepare.png)
 
+四個關卡的地圖總覽與戰鬥截圖見 [docs/levels](docs/levels/README.md)。
+
 ## 開始
 
 ```bash
