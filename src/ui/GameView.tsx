@@ -1,0 +1,341 @@
+import { useEffect, useRef } from 'react';
+import type { CellId, GameCommand, TowerKind } from '../domain/types';
+import { controller, level, runtime, syncStore } from '../app/runtime';
+import { SceneApp } from '../scene/scene-app';
+import type { QualityLevel } from '../scene/render/pipeline';
+import { useUi } from '../state/store';
+import { audio } from '../audio/audio';
+import type { Tool } from '../presentation/feed';
+
+const params = new URLSearchParams(location.search);
+
+export function resolveQuality(q: string): QualityLevel {
+  const forced = params.get('quality');
+  if (forced === 'low' || forced === 'medium' || forced === 'high' || forced === 'ultra') return forced;
+  if (q !== 'auto') return q as QualityLevel;
+  const cores = navigator.hardwareConcurrency ?? 4;
+  const mem = (navigator as unknown as { deviceMemory?: number }).deviceMemory ?? 8;
+  return cores <= 4 || mem <= 4 ? 'medium' : 'high';
+}
+
+/** Command helper with consistent feedback (toast + illegal flash + sfx). */
+export function issue(cmd: GameCommand, cells: CellId[] = []): boolean {
+  const r = controller.dispatch(cmd);
+  const ui = useUi.getState();
+  if (!r.ok) {
+    ui.toast(`✕ ${r.message}（未扣金幣）`, 'error');
+    runtime.scene?.flashIllegal(cells);
+    audio.play('illegal');
+    return false;
+  }
+  syncStore();
+  return true;
+}
+
+export function setTool(tool: Tool) {
+  const ui = useUi.getState();
+  if (ui.phase !== 'PREPARE' && tool.type !== 'none') { ui.toast('只能在準備階段建造或改造地形', 'error'); return; }
+  const same = ui.tool.type === tool.type && (tool.type !== 'build' || (ui.tool.type === 'build' && ui.tool.kind === tool.kind));
+  const next = same ? { type: 'none' as const } : tool;
+  ui.set({ tool: next, preview: null, selection: next.type === 'none' ? ui.selection : null });
+  runtime.scene?.setPreview(null);
+  runtime.scene?.setSelection(null);
+  audio.play('click');
+  const hover = ui.hover?.cellId ?? null;
+  if (next.type !== 'none' && hover) refreshPreview(hover);
+}
+
+function refreshPreview(cellId: CellId | null) {
+  const ui = useUi.getState();
+  const p = ui.phase === 'PREPARE' ? controller.preview(ui.tool, cellId) : null;
+  ui.set({ preview: p });
+  runtime.scene?.setPreview(p);
+}
+
+export function startWave() {
+  const ui = useUi.getState();
+  if (ui.phase !== 'PREPARE') return;
+  ui.set({ tool: { type: 'none' }, preview: null, selection: null });
+  runtime.scene?.setPreview(null);
+  runtime.scene?.setSelection(null);
+  issue({ type: 'START_WAVE' });
+}
+
+function sharedRuneSnap(scene: SceneApp) { scene.snapRune(); }
+
+export function GameView() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const cardsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current!;
+    const ui = useUi.getState();
+    const quality = resolveQuality(ui.settings.quality);
+    const scene = new SceneApp(canvas, controller, {
+      quality,
+      reducedMotion: ui.settings.reducedMotion,
+      screenShake: ui.settings.screenShake,
+      damageNumbers: ui.settings.damageNumbers,
+      colorblind: ui.settings.colorblindSafe,
+      dynamicResolution: ui.settings.dynamicResolution,
+      visualTest: params.has('visualTest'),
+    });
+    runtime.scene = scene;
+    ui.set({ qualityLabel: quality });
+    const camTurns = Number(params.get('cam') ?? 0);
+    for (let i = 0; i < camTurns; i++) scene.rig.rotate(1);
+    scene.hooks = {
+      onCoins: (screen, amount) => {
+        const el = document.createElement('div');
+        el.className = 'coin-fly';
+        el.style.left = `${screen.x}px`; el.style.top = `${screen.y}px`;
+        el.textContent = amount > 0 ? `+${amount}` : '';
+        const target = document.querySelector('.hud-gold')?.getBoundingClientRect();
+        if (target) {
+          el.style.setProperty('--tx', `${target.left + 20 - screen.x}px`);
+          el.style.setProperty('--ty', `${target.top + 14 - screen.y}px`);
+        }
+        document.body.appendChild(el);
+        setTimeout(() => { el.remove(); const u = useUi.getState(); u.set({ coinPulse: u.coinPulse + 1 }); audio.play('coin'); }, 650);
+      },
+    };
+    const resize = () => scene.resize(canvas.clientWidth, canvas.clientHeight);
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas);
+    syncStore();
+    if (!params.has('visualTest') && !params.has('nointro')) {
+      scene.playIntro();
+      useUi.getState().set({ introPlaying: true });
+    }
+
+    // ---- main loop -------------------------------------------------------------
+    let last = performance.now();
+    let raf = 0;
+    let perfAcc = 0;
+    const showPerf = params.has('perf');
+    const loop = (now: number) => {
+      raf = requestAnimationFrame(loop);
+      const dt = Math.min(0.1, (now - last) / 1000);
+      const frameMs = now - last;
+      last = now;
+      controller.update(dt);
+      scene.frame(dt, frameMs, now);
+      if (useUi.getState().introPlaying && !scene.introPlaying) useUi.getState().set({ introPlaying: false });
+      // portal preview cards follow their portals (2 DOM nodes only)
+      const cards = cardsRef.current;
+      if (cards) {
+        for (const el of Array.from(cards.children) as HTMLElement[]) {
+          const s = scene.portalScreen(el.dataset.portal!);
+          if (s) el.style.transform = `translate(${s.x}px, ${s.y}px) translate(-50%, -100%)`;
+        }
+      }
+      if (showPerf && (perfAcc += dt) > 0.5) { perfAcc = 0; useUi.getState().set({ perf: scene.perfInfo() }); }
+    };
+    raf = requestAnimationFrame(loop);
+
+    // ---- input -------------------------------------------------------------------
+    let dragging: { x: number; y: number; moved: boolean } | null = null;
+    let lastHoverCell: CellId | null = null;
+    const onMove = (ev: PointerEvent) => {
+      if (dragging) {
+        const dx = ev.clientX - dragging.x, dy = ev.clientY - dragging.y;
+        if (Math.abs(dx) + Math.abs(dy) > 2) dragging.moved = true;
+        scene.rig.pan(dx, dy, canvas.clientHeight);
+        dragging.x = ev.clientX; dragging.y = ev.clientY;
+        return;
+      }
+      const hit = scene.pick(ev.clientX, ev.clientY);
+      const cellId = hit.cellId;
+      if (cellId === lastHoverCell) return;
+      lastHoverCell = cellId;
+      scene.setHover(cellId);
+      const u = useUi.getState();
+      if (cellId) {
+        const c = level.cells.find((x) => x.id === cellId)!;
+        const platform = level.platforms.find((p) => p.id === c.platformId)?.name ?? level.connectors.find((x) => x.id === c.platformId)?.name ?? '';
+        u.set({ hover: { cellId, platform, elevation: controller.elevationOf(cellId), kind: c.kind, editable: c.editable, buildable: c.buildable } });
+      } else u.set({ hover: null });
+      if (u.tool.type !== 'none') refreshPreview(cellId);
+    };
+    const onDown = (ev: PointerEvent) => {
+      audio.unlock();
+      if (scene.introPlaying) { scene.skipIntro(); useUi.getState().set({ introPlaying: false }); }
+      if (ev.button === 1 || (ev.button === 0 && ev.shiftKey)) {
+        dragging = { x: ev.clientX, y: ev.clientY, moved: false };
+        canvas.setPointerCapture(ev.pointerId);
+        ev.preventDefault();
+        return;
+      }
+      if (ev.button === 2) {
+        const u = useUi.getState();
+        u.set({ tool: { type: 'none' }, preview: null, selection: null });
+        scene.setPreview(null); scene.setSelection(null);
+        return;
+      }
+      if (ev.button !== 0) return;
+      const u = useUi.getState();
+      const hit = scene.pick(ev.clientX, ev.clientY);
+      if (u.tool.type !== 'none' && u.phase === 'PREPARE') {
+        if (!hit.cellId) return;
+        const t = u.tool;
+        const p = controller.preview(t, hit.cellId);
+        const cells = p?.cellIds ?? [hit.cellId];
+        let ok: boolean;
+        if (t.type === 'build') ok = issue({ type: 'BUILD_TOWER', kind: t.kind, anchorCellId: hit.cellId }, cells);
+        else if (t.type === 'wall') ok = issue({ type: 'PLACE_WALL', cellId: hit.cellId }, cells);
+        else {
+          const cur = controller.elevationOf(hit.cellId);
+          ok = issue({ type: 'SET_ELEVATION', cellId: hit.cellId, next: (t.type === 'raise' ? cur + 1 : cur - 1) as never }, cells);
+        }
+        if (ok && t.type === 'build') {
+          const id = controller.state.towers[controller.state.towers.length - 1]!.id;
+          u.set({ tool: { type: 'none' }, preview: null, selection: { type: 'tower', id } });
+          scene.setPreview(null);
+          scene.setSelection({ type: 'tower', id });
+          if (u.tutorialStep < 2) u.set({ tutorialStep: 2 });
+        } else refreshPreview(hit.cellId);
+        return;
+      }
+      if (hit.towerId) {
+        u.set({ selection: { type: 'tower', id: hit.towerId } });
+        scene.setSelection({ type: 'tower', id: hit.towerId });
+      } else if (hit.wallId) {
+        const w = controller.state.walls.find((x) => x.id === hit.wallId)!;
+        u.set({ selection: { type: 'wall', id: w.id, cellId: w.cellId } });
+        scene.setSelection({ type: 'wall', id: w.id });
+      } else if (hit.cellId) {
+        const tower = controller.state.towers.find((t) => t.footprintCellIds.includes(hit.cellId!));
+        const wall = controller.state.walls.find((w) => w.cellId === hit.cellId);
+        if (tower) { u.set({ selection: { type: 'tower', id: tower.id } }); scene.setSelection({ type: 'tower', id: tower.id }); }
+        else if (wall) { u.set({ selection: { type: 'wall', id: wall.id, cellId: wall.cellId } }); scene.setSelection({ type: 'wall', id: wall.id }); }
+        else { u.set({ selection: { type: 'cell', cellId: hit.cellId } }); scene.setSelection({ type: 'cell', id: hit.cellId }); }
+      } else {
+        u.set({ selection: null }); scene.setSelection(null);
+      }
+      audio.play('click', { vol: 0.5 });
+    };
+    const onUp = (ev: PointerEvent) => { if (dragging) { dragging = null; canvas.releasePointerCapture(ev.pointerId); } };
+    const onWheel = (ev: WheelEvent) => { ev.preventDefault(); scene.rig.zoomBy(ev.deltaY); };
+    const onContext = (ev: Event) => ev.preventDefault();
+
+    const keysDown = new Set<string>();
+    const onKey = (ev: KeyboardEvent) => {
+      const u = useUi.getState();
+      if ((ev.target as HTMLElement)?.tagName === 'INPUT') return;
+      audio.unlock();
+      if (scene.introPlaying) { scene.skipIntro(); u.set({ introPlaying: false }); return; }
+      const k = ev.key.toLowerCase();
+      if ((ev.ctrlKey || ev.metaKey) && k === 'z') { ev.preventDefault(); issue({ type: 'UNDO_PREPARE' }); return; }
+      if (k === 'tab') { ev.preventDefault(); if (!u.showAllRanges) { u.set({ showAllRanges: true }); scene.setShowAllRanges(true); } return; }
+      if (keysDown.has(k)) return;
+      keysDown.add(k);
+      const towerKeys: Record<string, TowerKind> = { '1': 'arrow', '2': 'frost', '3': 'cannon' };
+      if (towerKeys[k]) setTool({ type: 'build', kind: towerKeys[k]! });
+      else if (k === 'r') setTool({ type: 'raise' });
+      else if (k === 'f') setTool({ type: 'lower' });
+      else if (k === 'b') setTool({ type: 'wall' });
+      else if (k === 'q') scene.rig.rotate(-1);
+      else if (k === 'e') scene.rig.rotate(1);
+      else if (k === '=' || k === '+') scene.rig.zoomStep(1);
+      else if (k === '-') scene.rig.zoomStep(-1);
+      else if (k === ' ') {
+        ev.preventDefault();
+        if (u.phase === 'COMBAT') { controller.flags.paused = !controller.flags.paused; syncStore(); }
+      } else if (k === 'enter') {
+        if (u.phase === 'PREPARE') startWave();
+        else if (u.phase === 'WAVE_RESULT') issue({ type: 'CONTINUE' });
+      } else if (k === 'escape') {
+        if (u.tool.type !== 'none' || u.preview) { u.set({ tool: { type: 'none' }, preview: null }); scene.setPreview(null); }
+        else if (u.selection) { u.set({ selection: null }); scene.setSelection(null); }
+        else { const open = !u.pauseOpen; u.set({ pauseOpen: open }); if (u.phase === 'COMBAT') { controller.flags.paused = open; syncStore(); } }
+      } else if (k === 'x' && u.selection?.type === 'tower' && u.phase === 'PREPARE') {
+        issue({ type: 'SELL_TOWER', towerId: u.selection.id });
+        u.set({ selection: null }); scene.setSelection(null);
+      } else if (k === 'u' && u.selection?.type === 'tower' && u.phase === 'PREPARE') {
+        issue({ type: 'UPGRADE_TOWER', towerId: u.selection.id });
+      }
+    };
+    const onKeyUp = (ev: KeyboardEvent) => {
+      const k = ev.key.toLowerCase();
+      keysDown.delete(k);
+      if (k === 'tab') { useUi.getState().set({ showAllRanges: false }); scene.setShowAllRanges(false); }
+    };
+    const panKeys = setInterval(() => {
+      const sp = 0.35;
+      if (keysDown.has('w') || keysDown.has('arrowup')) scene.rig.panWorld(0, sp);
+      if (keysDown.has('s') || keysDown.has('arrowdown')) scene.rig.panWorld(0, -sp);
+      if (keysDown.has('a') || keysDown.has('arrowleft')) scene.rig.panWorld(-sp, 0);
+      if (keysDown.has('d') || keysDown.has('arrowright')) scene.rig.panWorld(sp, 0);
+    }, 16);
+
+    canvas.addEventListener('pointermove', onMove);
+    canvas.addEventListener('pointerdown', onDown);
+    canvas.addEventListener('pointerup', onUp);
+    canvas.addEventListener('wheel', onWheel, { passive: false });
+    canvas.addEventListener('contextmenu', onContext);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('keyup', onKeyUp);
+    const runeFor = (s: { phase: string; tool: Tool }) => s.phase !== 'PREPARE' ? 0 : s.tool.type === 'raise' || s.tool.type === 'lower' ? 1 : s.tool.type === 'none' ? 0.3 : 0.15;
+    scene.setRuneEmphasis(runeFor(useUi.getState()));
+    if (params.has('visualTest')) sharedRuneSnap(scene);
+    const unsub = useUi.subscribe((s, prev) => {
+      if (s.tool !== prev.tool || s.phase !== prev.phase) scene.setRuneEmphasis(runeFor(s));
+      if (s.settings !== prev.settings) {
+        const q = resolveQuality(s.settings.quality);
+        scene.applyOptions({
+          quality: q, reducedMotion: s.settings.reducedMotion, screenShake: s.settings.screenShake,
+          damageNumbers: s.settings.damageNumbers, colorblind: s.settings.colorblindSafe, dynamicResolution: s.settings.dynamicResolution,
+        });
+        if (q !== s.qualityLabel) useUi.getState().set({ qualityLabel: q });
+        audio.setVolumes(s.settings.volume);
+      }
+    });
+    (window as unknown as { __sky: unknown }).__sky = { controller, scene, useUi };
+    return () => {
+      cancelAnimationFrame(raf);
+      clearInterval(panKeys);
+      ro.disconnect();
+      unsub();
+      canvas.removeEventListener('pointermove', onMove);
+      canvas.removeEventListener('pointerdown', onDown);
+      canvas.removeEventListener('pointerup', onUp);
+      canvas.removeEventListener('wheel', onWheel);
+      canvas.removeEventListener('contextmenu', onContext);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keyup', onKeyUp);
+      scene.dispose();
+      runtime.scene = null;
+    };
+  }, []);
+
+  const preview = useUi((s) => s.wavePreview);
+  const phase = useUi((s) => s.phase);
+  return (
+    <div className="game-view">
+      <canvas ref={canvasRef} className="game-canvas" />
+      <div ref={cardsRef} className="portal-cards" style={{ display: phase === 'PREPARE' ? undefined : 'none' }}>
+        {level.portals.map((p) => (
+          <PortalCard key={p.id} portalId={p.id} counts={preview[p.id]} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+import { EnemyIcon } from './icons';
+function PortalCard({ portalId, counts }: { portalId: string; counts?: Record<string, number> }) {
+  const entries = Object.entries(counts ?? {});
+  return (
+    <div className={`portal-card portal-${portalId}`} data-portal={portalId}>
+      <div className="portal-card-title">入口 {portalId}</div>
+      {entries.length ? (
+        <div className="portal-card-row">
+          {entries.map(([k, n]) => (
+            <span key={k} className="portal-card-enemy"><EnemyIcon kind={k as never} size={20} />×{n}</span>
+          ))}
+        </div>
+      ) : <div className="portal-card-empty">本波無敵人</div>}
+    </div>
+  );
+}

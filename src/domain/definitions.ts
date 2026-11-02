@@ -1,0 +1,65 @@
+import type { EnemyDef, EnemyKind, TowerDef, TowerKind, TowerLevel } from './types';
+
+/** Fixed simulation rate (Tech §8.1). */
+export const TPS = 20;
+export const STEP_SECONDS = 1 / TPS;
+
+/** GDD §7 — times stored in ticks (Tech §3.1: 0.80s=16, 1.35s=27, 2.60s=52, 1.8s=36). */
+export const TOWER_DEFS: Record<TowerKind, TowerDef> = {
+  arrow: {
+    kind: 'arrow', name: '木製箭塔', buildCost: 70, baseDamage: 20, baseRangeWorld: 3.5,
+    cooldownTicks: 16, damageType: 'physical', muzzleOffsetWorld: 1.6, projectileTicks: 4,
+  },
+  frost: {
+    kind: 'frost', name: '冰晶塔', buildCost: 85, baseDamage: 8, baseRangeWorld: 2.8,
+    cooldownTicks: 27, damageType: 'magic', muzzleOffsetWorld: 1.4, projectileTicks: 5,
+    slow: { ratio: 0.3, durationTicks: 36 },
+  },
+  cannon: {
+    kind: 'cannon', name: '岩石砲塔', buildCost: 105, baseDamage: 45, baseRangeWorld: 3.1,
+    cooldownTicks: 52, damageType: 'physical', muzzleOffsetWorld: 1.1, projectileTicks: 8,
+    blastRadiusWorld: 1.05,
+  },
+};
+
+/** GDD §8. */
+export const ENEMY_DEFS: Record<EnemyKind, EnemyDef> = {
+  slime: { kind: 'slime', name: '綠史萊姆', hp: 60, speedCellsPerSecond: 1.0, coreDamage: 1, goldReward: 6, physicalResistance: 0, targetOffsetWorld: 0.30 },
+  runner: { kind: 'runner', name: '疾風獸', hp: 42, speedCellsPerSecond: 1.65, coreDamage: 1, goldReward: 8, physicalResistance: 0, targetOffsetWorld: 0.35 },
+  golem: { kind: 'golem', name: '石殼巨人', hp: 190, speedCellsPerSecond: 0.62, coreDamage: 3, goldReward: 12, physicalResistance: 0.2, targetOffsetWorld: 0.55 },
+};
+
+/** GDD §4.4 / §6 terrain economy. */
+export const ECONOMY = {
+  raiseCost: 12,
+  lowerCost: 8,
+  wallCost: 15 as const,
+  wallRefund: Math.floor(15 * 0.5), // 7
+  sellRatio: 0.65,
+  maxUndo: 20,
+} as const;
+
+/** Level multipliers relative to Lv1 (GDD §7). */
+export const LEVEL_DAMAGE_MULT: Record<TowerLevel, number> = { 1: 1, 2: 1.3, 3: 1.7 };
+export const LEVEL_RANGE_BONUS: Record<TowerLevel, number> = { 1: 0, 2: 0.2, 3: 0.4 };
+
+export function upgradeCost(kind: TowerKind, toLevel: 2 | 3): number {
+  const base = TOWER_DEFS[kind].buildCost;
+  return toLevel === 2 ? Math.ceil(base * 0.7) : Math.ceil(base * 1.1);
+}
+
+export function sellRefund(investedGold: number): number {
+  return Math.floor(investedGold * ECONOMY.sellRatio);
+}
+
+export const HIGH_GROUND_PER_LEVEL = 0.3;
+export const HIGH_GROUND_MAX_LEVELS = 3;
+/** Typical enemy aim height used for range-projection sampling (Tech §7.3). */
+export const PREVIEW_TARGET_OFFSET = 0.35;
+
+export function starsForHp(hp: number): 0 | 1 | 2 | 3 {
+  if (hp >= 16) return 3;
+  if (hp >= 10) return 2;
+  if (hp >= 1) return 1;
+  return 0;
+}

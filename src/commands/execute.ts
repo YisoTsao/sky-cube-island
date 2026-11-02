@@ -1,0 +1,223 @@
+import type {
+  CellId, CommandResult, Elevation, GameCommand, GameEvent, GameState, LevelDef, RejectionCode, TowerInstance, TowerKind,
+} from '../domain/types';
+import { MAX_ELEVATION, MIN_ELEVATION } from '../domain/types';
+import { ECONOMY, TOWER_DEFS, sellRefund, upgradeCost } from '../domain/definitions';
+import { deriveMap, type DerivedMap } from '../navigation/derived-map';
+import { computeRoutes } from '../navigation/connectivity';
+import { buildSpawnQueue } from '../simulation/waves';
+
+const MESSAGES: Record<RejectionCode, string> = {
+  INVALID_PHASE: '目前階段不能進行這個操作',
+  OUT_OF_BOUNDS: '超出地圖範圍',
+  NOT_EDITABLE: '這塊地無法改造',
+  OCCUPIED: '這裡已經有建築',
+  INVALID_FOOTPRINT: '防禦塔需要同一平台、同一高度、可建造的 2×2 空地',
+  INVALID_ELEVATION: '高度已達上限或下限',
+  PROTECTED_CONNECTOR: '橋梁、階梯與其端點是固定通道，不可改造',
+  INSUFFICIENT_GOLD: '金幣不足',
+  NO_ROUTE_FROM_PORTAL: '必須保留所有入口到核心的道路',
+  ROUTE_TOO_LONG: '路線過長（超過上限），請保留較短的道路',
+  NOT_FOUND: '找不到目標',
+  INVALID_LEVEL_DATA: '關卡資料錯誤',
+  NOTHING_TO_UNDO: '沒有可以撤銷的操作',
+  MAX_LEVEL: '已經是最高等級',
+};
+
+export function rejectionMessage(code: RejectionCode): string { return MESSAGES[code]; }
+
+const reject = (state: GameState, code: RejectionCode, portalId?: string): CommandResult => {
+  let message = MESSAGES[code];
+  if (portalId && (code === 'NO_ROUTE_FROM_PORTAL' || code === 'ROUTE_TOO_LONG')) message += `（入口 ${portalId}）`;
+  return portalId ? { ok: false, state, code, message, portalId } : { ok: false, state, code, message };
+};
+
+export interface FootprintResolution { ok: true; cellIds: CellId[] }
+export type FootprintResult = FootprintResolution | { ok: false; code: RejectionCode };
+
+/** resolveTowerFootprint (Tech §5.1): anchor = min x/z; never auto-shifts. */
+export function resolveTowerFootprint(map: DerivedMap, anchorCellId: CellId): FootprintResult {
+  const anchor = map.index.cells.get(anchorCellId);
+  if (!anchor) return { ok: false, code: 'OUT_OF_BOUNDS' };
+  const ids: CellId[] = [];
+  const e = map.elevationOf(anchor.id);
+  let occupied = false;
+  for (const [dx, dz] of [[0, 0], [1, 0], [0, 1], [1, 1]] as const) {
+    const c = map.cellAt(anchor.pos.x + dx, anchor.pos.z + dz);
+    if (!c || c.kind !== 'ground' || c.platformId !== anchor.platformId) return { ok: false, code: 'INVALID_FOOTPRINT' };
+    if (map.elevationOf(c.id) !== e) return { ok: false, code: 'INVALID_FOOTPRINT' };
+    if (!c.buildable || c.immutable || map.index.connectorCellIds.has(c.id)) return { ok: false, code: 'INVALID_FOOTPRINT' };
+    if (map.occupantOf(c.id)) occupied = true;
+    ids.push(c.id);
+  }
+  if (occupied) return { ok: false, code: 'OCCUPIED' };
+  return { ok: true, cellIds: ids };
+}
+
+function goldEvent(tick: number, delta: number, balance: number, reason: string): GameEvent {
+  return { type: 'GOLD_CHANGED', tick, delta, balance, reason };
+}
+
+/** Validate routes on the tentative state; atomic commit or untouched original (Tech §6). */
+function commitWithRoutes(
+  level: LevelDef, original: GameState, draft: GameState, events: GameEvent[], cost: number,
+): CommandResult {
+  const routes = computeRoutes(level, draft);
+  if (!routes.ok) return reject(original, routes.code, routes.portalId);
+  events.push({ type: 'ROUTES_CHANGED', tick: draft.tick, portalIds: level.portals.map((p) => p.id) });
+  return { ok: true, state: draft, events, cost };
+}
+
+function editProtectionCode(map: DerivedMap, cellId: CellId): RejectionCode {
+  const c = map.index.cells.get(cellId)!;
+  if (map.index.connectorCellIds.has(cellId)) return 'PROTECTED_CONNECTOR';
+  for (const end of map.index.connectorEndpointIds) {
+    const e = map.index.cells.get(end)!;
+    if (Math.max(Math.abs(e.pos.x - c.pos.x), Math.abs(e.pos.z - c.pos.z)) <= 1) return 'PROTECTED_CONNECTOR';
+  }
+  return 'NOT_EDITABLE';
+}
+
+/**
+ * The single entry point that mutates game state (Tech §6.2). Pure: returns a new state or the
+ * untouched original on failure. UNDO_PREPARE is handled by the session layer.
+ */
+export function executeCommand(level: LevelDef, state: GameState, cmd: GameCommand): CommandResult {
+  if (cmd.type === 'UNDO_PREPARE') return reject(state, state.phase === 'PREPARE' ? 'NOTHING_TO_UNDO' : 'INVALID_PHASE');
+  if (cmd.type === 'CONTINUE') return continueAfterResult(level, state);
+  if (state.phase !== 'PREPARE') return reject(state, 'INVALID_PHASE');
+  const map = deriveMap(level, state);
+  const tick = state.tick;
+
+  switch (cmd.type) {
+    case 'SET_ELEVATION': {
+      const cell = map.index.cells.get(cmd.cellId);
+      if (!cell) return reject(state, 'OUT_OF_BOUNDS');
+      if (cell.kind !== 'ground' || !cell.editable) return reject(state, editProtectionCode(map, cell.id));
+      if (map.occupantOf(cell.id)) return reject(state, 'OCCUPIED');
+      const cur = map.elevationOf(cell.id);
+      if (Math.abs(cmd.next - cur) !== 1 || cmd.next < MIN_ELEVATION || cmd.next > MAX_ELEVATION) return reject(state, 'INVALID_ELEVATION');
+      const cost = cmd.next > cur ? ECONOMY.raiseCost : ECONOMY.lowerCost;
+      if (state.gold < cost) return reject(state, 'INSUFFICIENT_GOLD');
+      const editedElevations = { ...state.editedElevations };
+      if (cmd.next === cell.elevation) delete editedElevations[cell.id];
+      else editedElevations[cell.id] = cmd.next;
+      const draft: GameState = { ...state, gold: state.gold - cost, editedElevations };
+      return commitWithRoutes(level, state, draft, [
+        { type: 'TERRAIN_CHANGED', tick, cellId: cell.id, from: cur, to: cmd.next as Elevation },
+        goldEvent(tick, -cost, draft.gold, cmd.next > cur ? 'raise' : 'lower'),
+      ], cost);
+    }
+    case 'PLACE_WALL': {
+      const cell = map.index.cells.get(cmd.cellId);
+      if (!cell) return reject(state, 'OUT_OF_BOUNDS');
+      if (cell.kind !== 'ground' || !cell.editable) return reject(state, editProtectionCode(map, cell.id));
+      if (map.occupantOf(cell.id)) return reject(state, 'OCCUPIED');
+      if (state.gold < ECONOMY.wallCost) return reject(state, 'INSUFFICIENT_GOLD');
+      const wallId = `w${state.nextEntityId}`;
+      const draft: GameState = {
+        ...state,
+        gold: state.gold - ECONOMY.wallCost,
+        walls: [...state.walls, { id: wallId, cellId: cell.id, cost: ECONOMY.wallCost }],
+        nextEntityId: state.nextEntityId + 1,
+      };
+      return commitWithRoutes(level, state, draft, [
+        { type: 'WALL_PLACED', tick, wallId, cellId: cell.id },
+        goldEvent(tick, -ECONOMY.wallCost, draft.gold, 'wall'),
+      ], ECONOMY.wallCost);
+    }
+    case 'REMOVE_WALL': {
+      const wall = state.walls.find((w) => w.id === cmd.wallId);
+      if (!wall) return reject(state, 'NOT_FOUND');
+      const draft: GameState = {
+        ...state,
+        gold: state.gold + ECONOMY.wallRefund,
+        walls: state.walls.filter((w) => w.id !== wall.id),
+      };
+      return commitWithRoutes(level, state, draft, [
+        { type: 'WALL_REMOVED', tick, wallId: wall.id, cellId: wall.cellId },
+        goldEvent(tick, ECONOMY.wallRefund, draft.gold, 'wallRefund'),
+      ], -ECONOMY.wallRefund);
+    }
+    case 'BUILD_TOWER': {
+      const fp = resolveTowerFootprint(map, cmd.anchorCellId);
+      if (!fp.ok) return reject(state, fp.code);
+      const def = TOWER_DEFS[cmd.kind];
+      if (state.gold < def.buildCost) return reject(state, 'INSUFFICIENT_GOLD');
+      const tower: TowerInstance = {
+        id: `t${state.nextEntityId}`, kind: cmd.kind, anchorCellId: cmd.anchorCellId,
+        footprintCellIds: fp.cellIds, level: 1, cooldownTicks: 0, investedGold: def.buildCost,
+        targeting: 'FIRST', builtWave: state.currentWaveIndex,
+      };
+      const draft: GameState = {
+        ...state, gold: state.gold - def.buildCost, towers: [...state.towers, tower], nextEntityId: state.nextEntityId + 1,
+      };
+      return commitWithRoutes(level, state, draft, [
+        { type: 'TOWER_BUILT', tick, towerId: tower.id, kind: tower.kind, level: 1, anchorCellId: tower.anchorCellId },
+        goldEvent(tick, -def.buildCost, draft.gold, 'build'),
+      ], def.buildCost);
+    }
+    case 'UPGRADE_TOWER': {
+      const t = state.towers.find((x) => x.id === cmd.towerId);
+      if (!t) return reject(state, 'NOT_FOUND');
+      if (t.level >= 3) return reject(state, 'MAX_LEVEL');
+      const to = (t.level + 1) as 2 | 3;
+      const cost = upgradeCost(t.kind, to);
+      if (state.gold < cost) return reject(state, 'INSUFFICIENT_GOLD');
+      const upgraded: TowerInstance = { ...t, level: to, investedGold: t.investedGold + cost };
+      const draft: GameState = { ...state, gold: state.gold - cost, towers: state.towers.map((x) => (x.id === t.id ? upgraded : x)) };
+      return {
+        ok: true, state: draft, cost,
+        events: [
+          { type: 'TOWER_UPGRADED', tick, towerId: t.id, kind: t.kind, level: to, anchorCellId: t.anchorCellId },
+          goldEvent(tick, -cost, draft.gold, 'upgrade'),
+        ],
+      };
+    }
+    case 'SELL_TOWER': {
+      const t = state.towers.find((x) => x.id === cmd.towerId);
+      if (!t) return reject(state, 'NOT_FOUND');
+      const refund = sellRefund(t.investedGold);
+      const draft: GameState = { ...state, gold: state.gold + refund, towers: state.towers.filter((x) => x.id !== t.id) };
+      return commitWithRoutes(level, state, draft, [
+        { type: 'TOWER_SOLD', tick, towerId: t.id, kind: t.kind, level: t.level, anchorCellId: t.anchorCellId },
+        goldEvent(tick, refund, draft.gold, 'sell'),
+      ], -refund);
+    }
+    case 'START_WAVE': {
+      const wave = level.waves[state.currentWaveIndex];
+      if (!wave) return reject(state, 'INVALID_LEVEL_DATA');
+      const routes = computeRoutes(level, state);
+      if (!routes.ok) return reject(state, routes.code, routes.portalId);
+      const draft: GameState = {
+        ...state,
+        phase: 'COMBAT',
+        waveTick: 0,
+        spawnCursor: 0,
+        spawnQueue: buildSpawnQueue(wave, level.portals.map((p) => p.id)),
+        frozenRoutes: routes.routes,
+        towers: state.towers.map((t) => ({ ...t, cooldownTicks: 0 })),
+      };
+      return {
+        ok: true, state: draft, cost: 0,
+        events: [
+          { type: 'PHASE_CHANGED', tick, from: 'PREPARE', to: 'COMBAT' },
+          { type: 'WAVE_STARTED', tick, waveIndex: state.currentWaveIndex },
+        ],
+      };
+    }
+  }
+}
+
+function continueAfterResult(level: LevelDef, state: GameState): CommandResult {
+  if (state.phase !== 'WAVE_RESULT') return reject(state, 'INVALID_PHASE');
+  const nextIndex = state.currentWaveIndex + 1;
+  if (nextIndex >= level.waves.length) return reject(state, 'INVALID_PHASE');
+  const draft: GameState = { ...state, phase: 'PREPARE', currentWaveIndex: nextIndex, frozenRoutes: {}, spawnQueue: [], spawnCursor: 0, waveTick: 0 };
+  return {
+    ok: true, state: draft, cost: 0,
+    events: [{ type: 'PHASE_CHANGED', tick: state.tick, from: 'WAVE_RESULT', to: 'PREPARE' }],
+  };
+}
+
+export function towerCostFor(kind: TowerKind): number { return TOWER_DEFS[kind].buildCost; }
