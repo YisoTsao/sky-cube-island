@@ -381,9 +381,9 @@ export class SceneApp {
     return t ? this.worldToScreen(t.group.position.clone().add(new Vector3(0, 2.4, 0))) : null;
   }
 
-  /** Intro camera tour (GDD §10.3): orbit + zoom with tilt-shift, skippable. */
+  /** Intro camera tour (GDD §10.3): orbit + zoom, skippable (no tilt-shift blur: the board must stay sharp). */
   playIntro() { this.introT = 0; this.rig.zoomIndex = 0; this.rig.snapZoom(); }
-  skipIntro() { if (this.introT >= 0) { this.introT = -1; this.pipeline.setTiltShift(false); this.rig.zoomIndex = 1; this.rig.snapZoom(); } }
+  skipIntro() { if (this.introT >= 0) { this.introT = -1; this.rig.zoomIndex = 1; this.rig.snapZoom(); } }
   get introPlaying() { return this.introT >= 0; }
 
   // ---------------------------------------------------------------- entity sync
@@ -631,7 +631,6 @@ export class SceneApp {
     // intro tour
     if (this.introT >= 0) {
       this.introT += dtReal;
-      this.pipeline.setTiltShift(!this.opts.reducedMotion);
       this.rig.yaw += dtReal * 0.35;
       if (this.introT > 5) this.skipIntro();
     }
