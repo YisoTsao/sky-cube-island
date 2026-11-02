@@ -309,7 +309,8 @@ b.bad { color: var(--bad); }
 
 /* ------------------------------------------------------------------ title */
 .title-screen {
-  position: fixed; inset: 0; display: grid; place-items: center; overflow: hidden;
+  position: fixed; inset: 0; display: grid; place-items: center; overflow-x: hidden; overflow-y: auto;
+  overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
   background:
     radial-gradient(ellipse at 50% 120%, rgba(255, 240, 210, .95), rgba(255, 240, 210, 0) 55%),
     radial-gradient(circle at 78% 18%, rgba(255, 250, 220, .9), rgba(255, 250, 220, 0) 22%),
@@ -528,8 +529,22 @@ b.bad { color: var(--bad); }
   .stars svg { width: 52px; height: 52px; }
   .star.s2 svg { width: 62px; height: 62px; }
   .title-buttons .btn.big { width: min(260px, 78vw); }
-  .level-select { flex-direction: column; align-items: center; }
-  .level-card { width: min(320px, 86vw); }
+  /* four levels in a 2×2 grid so the start button stays on screen on phones */
+  .title-card { padding: calc(12px + var(--sat)) calc(12px + var(--sar)) calc(12px + var(--sab)) calc(12px + var(--sal)); }
+  .level-select { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: min(440px, 94vw); margin-bottom: 14px; }
+  .level-card { width: auto; min-width: 0; padding: 8px 10px 6px; }
+  .level-card-name { font-size: 15px; }
+  .level-card-sub, .level-card-meta { display: none; }
+  .level-card-stars svg { width: 14px; height: 14px; }
+}
+@media (max-width: 640px) {
+  .title-gem svg { width: 44px; height: 44px; }
+  .logo-main { font-size: 40px; }
+  .logo-sub { margin-top: 10px; font-size: 18px; }
+  .title-tag { margin: 12px 0 14px; font-size: 14px; }
+}
+@media (max-height: 520px) {
+  .level-select { grid-template-columns: repeat(4, minmax(0, 1fr)); width: min(760px, 94vw); }
 }
 
 @media (prefers-reduced-motion: reduce) {
