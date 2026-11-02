@@ -1,3 +1,5 @@
+import type { RunLog } from './challenges';
+
 /**
  * Domain contracts (Tech §3). Pure TypeScript — no Three.js / React / DOM.
  */
@@ -235,6 +237,8 @@ export interface GameState {
   spawnQueue: SpawnQueueItem[];
   /** Frozen route snapshot per portal for the active wave (Tech §4.2). */
   frozenRoutes: Record<string, CellId[]>;
+  /** Read-only run log for optional challenges (never read by the simulation). */
+  run?: RunLog;
 }
 
 export type GameCommand =

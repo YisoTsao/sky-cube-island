@@ -85,6 +85,10 @@ export const GameStateSchema = z.object({
   nextEntityId: z.number().int().min(0),
   spawnQueue: z.array(z.any()).max(0),
   frozenRoutes: z.record(z.string(), z.array(z.string())),
+  run: z.object({
+    wallsPlaced: z.number().int().min(0), terrainEdits: z.number().int().min(0), towersSold: z.number().int().min(0),
+    upgrades: z.number().int().min(0), maxTowers: z.number().int().min(0), kindsBuilt: z.array(towerKind),
+  }).optional(),
 });
 
 export const SaveFileSchema = z.object({
