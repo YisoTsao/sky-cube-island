@@ -399,7 +399,7 @@ export function GameView() {
         audio.setVolumes(s.settings.volume);
       }
     });
-    (window as unknown as { __sky: unknown }).__sky = { controller, scene, useUi };
+    (window as unknown as { __sky: unknown }).__sky = { controller, scene, useUi, audio };
     return () => {
       cancelAnimationFrame(raf);
       clearInterval(panKeys);

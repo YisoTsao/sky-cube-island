@@ -1,20 +1,44 @@
 import { MAX_VOICES, type SfxId } from './sfx-registry';
+import { MUSIC_TRACKS, SFX_SAMPLES, audioUrl, type MusicTrack } from './assets';
 
 /**
- * Web Audio engine (Tech §9.9): Master → Music / SFX / UI / Ambience buses, synthesized SFX with
- * voice limits, ±5% pitch & ±2 dB variation, stereo pan, ducking, and an adaptive 3-layer
- * generative score (base / combat / tension) crossfaded over 1.5 s. All sounds are generated
- * procedurally at runtime — no third-party audio assets, so no licensing to track.
+ * Web Audio engine (Tech §9.9): Master → Music / SFX / UI / Ambience buses, voice limits,
+ * ±5% pitch & ±2 dB variation, stereo pan, ducking, and adaptive music crossfaded over 1.5 s.
+ *
+ * Sounds come from recorded CC0 assets (src/audio/assets.ts, credits in public/audio/CREDITS.md),
+ * loaded lazily after the first user gesture. Until they arrive — or if a file fails to load —
+ * the original procedural synth (SFX + 3-layer generative score) plays instead, so the game is
+ * never silent and works offline from a bare dist/ folder.
  */
 type Bus = 'music' | 'sfx' | 'ui' | 'ambience';
 
 const UI_SFX = new Set<SfxId>(['click', 'hover', 'illegal', 'coin']);
+
+/** Ducking applied when these play (−dB, seconds). */
+const DUCK: Partial<Record<SfxId, [number, number]>> = {
+  coreHit: [4, 0.4], waveStart: [5, 1.6], waveClear: [6, 1.2], victory: [8, 3.5], defeat: [8, 3],
+};
+
+/** A decoded sample with its leading/trailing silence trimmed off (MP3 encoder padding, fades). */
+interface Clip { buf: AudioBuffer; start: number; end: number }
+
+function trimmed(buf: AudioBuffer, threshold = 0.002): Clip {
+  const chans = Array.from({ length: buf.numberOfChannels }, (_, i) => buf.getChannelData(i));
+  const loud = (i: number) => chans.some((d) => Math.abs(d[i]!) > threshold);
+  let a = 0;
+  while (a < buf.length - 1 && !loud(a)) a++;
+  let b = buf.length - 1;
+  while (b > a && !loud(b)) b--;
+  return { buf, start: a / buf.sampleRate, end: (b + 1) / buf.sampleRate };
+}
 
 export class AudioEngine {
   private ctx: AudioContext | null = null;
   private master!: GainNode;
   private buses!: Record<Bus, GainNode>;
   private duck!: GainNode;
+  /** SFX-volume path that bypasses the duck, so stingers don't duck themselves. */
+  private stinger!: GainNode;
   private noiseBuf!: AudioBuffer;
   private voices = new Map<SfxId, number>();
   private layers!: { base: GainNode; combat: GainNode; tension: GainNode };
@@ -23,6 +47,12 @@ export class AudioEngine {
   private beat = 0;
   private volumes = { master: 0.8, music: 0.55, sfx: 0.8, ui: 0.7, ambience: 0.6 };
   private ambienceStarted = false;
+  private assetsRequested = false;
+  private samples = new Map<SfxId, { clips: Clip[]; gain: number; vary: boolean }>();
+  private tracks: Partial<Record<MusicTrack, Clip>> = {};
+  private trackGain!: Record<MusicTrack, GainNode>;
+  private trackSrc: Partial<Record<MusicTrack, AudioBufferSourceNode>> = {};
+  private recordedMusic = false;
   musicState: 'prepare' | 'combat' | 'tension' | 'silent' = 'silent';
 
   get ready() { return !!this.ctx && this.ctx.state === 'running'; }
@@ -45,20 +75,59 @@ export class AudioEngine {
       this.buses.sfx.connect(this.duck);
       this.buses.ambience.connect(this.duck);
       this.buses.ui.connect(this.master);
+      this.stinger = c.createGain();
+      this.stinger.connect(this.master);
       this.noiseBuf = c.createBuffer(1, c.sampleRate * 2, c.sampleRate);
       const d = this.noiseBuf.getChannelData(0);
       for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
       this.layers = { base: c.createGain(), combat: c.createGain(), tension: c.createGain() };
       for (const l of Object.values(this.layers)) { l.gain.value = 0; l.connect(this.buses.music); }
+      this.trackGain = { prepare: c.createGain(), combat: c.createGain() };
+      for (const g of Object.values(this.trackGain)) { g.gain.value = 0; g.connect(this.buses.music); }
       this.applyVolumes();
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume();
-    if (!this.schedTimer) {
+    if (!this.schedTimer && !this.recordedMusic) {
       this.nextBeat = this.ctx.currentTime + 0.1;
       this.schedTimer = setInterval(() => this.schedule(), 90);
     }
     if (!this.ambienceStarted) { this.ambienceStarted = true; this.startAmbience(); }
+    if (!this.assetsRequested) { this.assetsRequested = true; void this.loadAssets(); }
   }
+
+  // ------------------------------------------------------------------ recorded assets
+  private async decode(path: string): Promise<Clip | null> {
+    try {
+      const res = await fetch(audioUrl(path));
+      if (!res.ok) return null;
+      const buf = await this.ctx!.decodeAudioData(await res.arrayBuffer());
+      return trimmed(buf);
+    } catch {
+      return null; // missing file / decode error → keep the synth fallback for this sound
+    }
+  }
+
+  private async loadAssets() {
+    const sfx = Object.entries(SFX_SAMPLES) as [SfxId, NonNullable<(typeof SFX_SAMPLES)[SfxId]>][];
+    await Promise.all(sfx.map(async ([id, def]) => {
+      const clips = (await Promise.all(def.files.map((f) => this.decode(f)))).filter((c): c is Clip => !!c);
+      if (clips.length) this.samples.set(id, { clips, gain: def.gain, vary: def.vary ?? false });
+    }));
+    // Music after SFX: it is the bigger download and the synth score covers the gap.
+    const music = await Promise.all((Object.keys(MUSIC_TRACKS) as MusicTrack[]).map(async (k) => [k, await this.decode(MUSIC_TRACKS[k])] as const));
+    if (music.every(([, c]) => !!c)) {
+      for (const [k, c] of music) this.tracks[k] = c!;
+      this.recordedMusic = true;
+      // retire the generative score
+      if (this.schedTimer) { clearInterval(this.schedTimer); this.schedTimer = null; }
+      const t = this.ctx!.currentTime;
+      for (const l of Object.values(this.layers)) l.gain.setTargetAtTime(0, t, 0.3);
+      this.setMusic(this.musicState, true);
+    }
+  }
+
+  /** True while recorded music (rather than the synth fallback) drives the score. */
+  get usingRecordedMusic() { return this.recordedMusic; }
 
   setVolumes(v: typeof this.volumes) { this.volumes = { ...v }; this.applyVolumes(); }
   private applyVolumes() {
@@ -67,13 +136,16 @@ export class AudioEngine {
     this.master.gain.setTargetAtTime(this.volumes.master, t, 0.05);
     this.buses.music.gain.setTargetAtTime(this.volumes.music * 0.55, t, 0.05);
     this.buses.sfx.gain.setTargetAtTime(this.volumes.sfx, t, 0.05);
+    this.stinger.gain.setTargetAtTime(this.volumes.sfx, t, 0.05);
     this.buses.ui.gain.setTargetAtTime(this.volumes.ui * 0.8, t, 0.05);
     this.buses.ambience.gain.setTargetAtTime(this.volumes.ambience * 0.5, t, 0.05);
   }
 
-  setMusic(state: AudioEngine['musicState']) {
+  setMusic(state: AudioEngine['musicState'], force = false) {
+    const changed = state !== this.musicState;
     this.musicState = state;
     if (!this.ctx) return;
+    if (this.recordedMusic) { if (changed || force) this.applyTracks(); return; }
     const t = this.ctx.currentTime;
     const target = {
       base: state === 'silent' ? 0 : 0.9,
@@ -81,6 +153,39 @@ export class AudioEngine {
       tension: state === 'tension' ? 0.7 : 0,
     };
     for (const k of ['base', 'combat', 'tension'] as const) this.layers[k].gain.setTargetAtTime(target[k], t, 1.5 / 3);
+  }
+
+  /** Crossfade the looping recorded tracks to match `musicState` (1.5 s, Tech §9.9). */
+  private applyTracks() {
+    const c = this.ctx!;
+    const t = c.currentTime;
+    const s = this.musicState;
+    const want: MusicTrack | null = s === 'prepare' ? 'prepare' : s === 'combat' || s === 'tension' ? 'combat' : null;
+    for (const k of Object.keys(this.trackGain) as MusicTrack[]) {
+      const g = this.trackGain[k];
+      const src = this.trackSrc[k];
+      if (k === want) {
+        if (!src) {
+          const clip = this.tracks[k]!;
+          const n = c.createBufferSource();
+          n.buffer = clip.buf;
+          n.loop = true; n.loopStart = clip.start; n.loopEnd = clip.end;
+          n.connect(g);
+          n.start(t, clip.start);
+          this.trackSrc[k] = n;
+          g.gain.cancelScheduledValues(t);
+          g.gain.setValueAtTime(0.0001, t);
+        }
+        g.gain.setTargetAtTime(1, t, 1.5 / 3);
+        // low core HP: same battle theme pushed a little faster/higher for urgency
+        this.trackSrc[k]!.playbackRate.setTargetAtTime(s === 'tension' ? 1.07 : 1, t, 0.6);
+      } else if (src) {
+        g.gain.cancelScheduledValues(t);
+        g.gain.setTargetAtTime(0, t, 1.5 / 3);
+        src.stop(t + 2.5);
+        delete this.trackSrc[k];
+      }
+    }
   }
 
   /** Short duck of music+sfx (−4 dB for 0.4 s on core hit; −6 dB for stingers). */
@@ -141,7 +246,20 @@ export class AudioEngine {
     out.gain.value = v;
     const pan = c.createStereoPanner();
     pan.pan.value = Math.max(-0.6, Math.min(0.6, (opts.pan ?? 0) * 0.6));
-    out.connect(pan).connect(UI_SFX.has(id) ? this.buses.ui : this.buses.sfx);
+    const duck = DUCK[id];
+    out.connect(pan).connect(UI_SFX.has(id) ? this.buses.ui : duck ? this.stinger : this.buses.sfx);
+    if (duck) this.duckFor(duck[0], duck[1]);
+    const sample = this.samples.get(id);
+    if (sample) {
+      const clip = sample.clips[Math.floor(Math.random() * sample.clips.length)]!;
+      const s = c.createBufferSource();
+      s.buffer = clip.buf;
+      s.playbackRate.value = sample.vary ? p : 1;
+      out.gain.value = v * sample.gain;
+      s.connect(out);
+      s.start(t, clip.start, clip.end - clip.start);
+      return;
+    }
     switch (id) {
       case 'click': this.tone(out, 'triangle', 880 * p, 660 * p, t, 0.002, 0.06, 0.25); break;
       case 'hover': this.tone(out, 'sine', 1320 * p, 1320 * p, t, 0.002, 0.03, 0.06); break;
@@ -201,22 +319,18 @@ export class AudioEngine {
       case 'coreHit':
         this.tone(out, 'sine', 110, 82, t, 0.002, 1.2, 0.8);
         this.tone(out, 'triangle', 220, 205, t, 0.002, 0.9, 0.35);
-        this.noise(out, t, 0.001, 0.25, 0.5, 'highpass', 3000, 1200);
-        this.duckFor(4, 0.4); break;
+        this.noise(out, t, 0.001, 0.25, 0.5, 'highpass', 3000, 1200); break;
       case 'waveStart':
         this.tone(out, 'sawtooth', 196, 196, t, 0.08, 0.5, 0.18);
         this.tone(out, 'sawtooth', 294, 294, t + 0.42, 0.06, 0.8, 0.2);
         this.tone(out, 'sine', 98, 98, t, 0.1, 1.2, 0.25); break;
       case 'waveClear':
-        [523, 659, 784, 1047, 1319].forEach((f, i) => this.tone(out, 'triangle', f, f, t + i * 0.08, 0.004, 0.5, 0.14));
-        this.duckFor(6, 0.9); break;
+        [523, 659, 784, 1047, 1319].forEach((f, i) => this.tone(out, 'triangle', f, f, t + i * 0.08, 0.004, 0.5, 0.14)); break;
       case 'victory':
-        [523, 659, 784, 1047, 784, 1047, 1319, 1568].forEach((f, i) => this.tone(out, 'triangle', f, f, t + i * 0.12, 0.004, i === 7 ? 1.4 : 0.35, 0.16));
-        this.duckFor(6, 1.8); break;
+        [523, 659, 784, 1047, 784, 1047, 1319, 1568].forEach((f, i) => this.tone(out, 'triangle', f, f, t + i * 0.12, 0.004, i === 7 ? 1.4 : 0.35, 0.16)); break;
       case 'defeat':
         [392, 349, 311, 262].forEach((f, i) => this.tone(out, 'triangle', f, f * 0.98, t + i * 0.22, 0.01, 0.6, 0.18));
-        this.tone(out, 'sine', 65, 45, t, 0.05, 2, 0.4);
-        this.duckFor(6, 1.6); break;
+        this.tone(out, 'sine', 65, 45, t, 0.05, 2, 0.4); break;
     }
   }
 
