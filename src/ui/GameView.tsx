@@ -3,11 +3,15 @@ import type { CellId, GameCommand, TowerKind } from '../domain/types';
 import { controller, level, runtime, syncStore } from '../app/runtime';
 import { SceneApp } from '../scene/scene-app';
 import type { QualityLevel } from '../scene/render/pipeline';
+import { autoQuality, isMobileDevice } from '../settings/device';
 import { useUi } from '../state/store';
 import { audio } from '../audio/audio';
 import type { Tool } from '../presentation/feed';
+import { TouchGestures, pinchToWheelDelta } from './touch-gestures';
 
 const params = new URLSearchParams(location.search);
+/** A confirming touch tap within this distance of the previewed cell counts as the same cell. */
+const TOUCH_CONFIRM_RADIUS_PX = 26;
 
 export function resolveQuality(q: string): QualityLevel {
   const forced = params.get('quality');
@@ -15,7 +19,7 @@ export function resolveQuality(q: string): QualityLevel {
   if (q !== 'auto') return q as QualityLevel;
   const cores = navigator.hardwareConcurrency ?? 4;
   const mem = (navigator as unknown as { deviceMemory?: number }).deviceMemory ?? 8;
-  return cores <= 4 || mem <= 4 ? 'medium' : 'high';
+  return autoQuality({ cores, memGb: mem, mobile: isMobileDevice() });
 }
 
 /** Command helper with consistent feedback (toast + illegal flash + sfx). */
@@ -135,19 +139,17 @@ export function GameView() {
     raf = requestAnimationFrame(loop);
 
     // ---- input -------------------------------------------------------------------
+    // Mouse: hover previews, left click places/selects, middle or shift-drag pans, right click cancels.
+    // Touch: tap selects; with a tool held, the first tap previews a cell and a second tap on the
+    // same cell confirms (no hover on phones). One-finger drag pans, pinch zooms, twist rotates.
     let dragging: { x: number; y: number; moved: boolean } | null = null;
     let lastHoverCell: CellId | null = null;
-    const onMove = (ev: PointerEvent) => {
-      if (dragging) {
-        const dx = ev.clientX - dragging.x, dy = ev.clientY - dragging.y;
-        if (Math.abs(dx) + Math.abs(dy) > 2) dragging.moved = true;
-        scene.rig.pan(dx, dy, canvas.clientHeight);
-        dragging.x = ev.clientX; dragging.y = ev.clientY;
-        return;
-      }
-      const hit = scene.pick(ev.clientX, ev.clientY);
-      const cellId = hit.cellId;
-      if (cellId === lastHoverCell) return;
+    let pendingTouchCell: CellId | null = null;
+    const gestures = new TouchGestures();
+    const isTouch = (ev: PointerEvent) => ev.pointerType === 'touch' || ev.pointerType === 'pen';
+    const markInput = (touch: boolean) => { if (useUi.getState().touchUi !== touch) useUi.getState().set({ touchUi: touch }); };
+
+    const setHoverCell = (cellId: CellId | null) => {
       lastHoverCell = cellId;
       scene.setHover(cellId);
       const u = useUi.getState();
@@ -158,45 +160,71 @@ export function GameView() {
       } else u.set({ hover: null });
       if (u.tool.type !== 'none') refreshPreview(cellId);
     };
-    const onDown = (ev: PointerEvent) => {
-      audio.unlock();
-      if (scene.introPlaying) { scene.skipIntro(); useUi.getState().set({ introPlaying: false }); }
-      if (ev.button === 1 || (ev.button === 0 && ev.shiftKey)) {
-        dragging = { x: ev.clientX, y: ev.clientY, moved: false };
-        canvas.setPointerCapture(ev.pointerId);
-        ev.preventDefault();
+
+    const onMove = (ev: PointerEvent) => {
+      if (isTouch(ev)) {
+        for (const a of gestures.move(ev.pointerId, ev.clientX, ev.clientY)) {
+          if (a.type === 'pan') scene.rig.pan(a.dx, a.dy, canvas.clientHeight);
+          else if (a.type === 'zoom') scene.rig.zoomBy(pinchToWheelDelta(a.factor));
+          else scene.rig.rotate(a.dir);
+        }
         return;
       }
-      if (ev.button === 2) {
-        const u = useUi.getState();
-        u.set({ tool: { type: 'none' }, preview: null, selection: null });
-        scene.setPreview(null); scene.setSelection(null);
+      if (dragging) {
+        const dx = ev.clientX - dragging.x, dy = ev.clientY - dragging.y;
+        if (Math.abs(dx) + Math.abs(dy) > 2) dragging.moved = true;
+        scene.rig.pan(dx, dy, canvas.clientHeight);
+        dragging.x = ev.clientX; dragging.y = ev.clientY;
         return;
       }
-      if (ev.button !== 0) return;
-      const u = useUi.getState();
       const hit = scene.pick(ev.clientX, ev.clientY);
+      if (hit.cellId === lastHoverCell) return;
+      setHoverCell(hit.cellId);
+    };
+
+    /** Primary action at a screen point (mouse left click, or a confirmed touch tap). */
+    const primaryAt = (x: number, y: number, touch: boolean) => {
+      const u = useUi.getState();
+      const hit = scene.pick(x, y);
       if (u.tool.type !== 'none' && u.phase === 'PREPARE') {
-        if (!hit.cellId) return;
+        let cellId = hit.cellId;
+        if (touch && pendingTouchCell && cellId !== pendingTouchCell) {
+          // fingers are imprecise on small tiles: a confirm tap anywhere on the previewed footprint,
+          // or within a finger's width of the previewed cell, counts as the same cell
+          const s = scene.worldToScreen(scene.cellWorld(pendingTouchCell));
+          if ((cellId && u.preview?.cellIds?.includes(cellId)) || Math.hypot(s.x - x, s.y - y) <= TOUCH_CONFIRM_RADIUS_PX) cellId = pendingTouchCell;
+        }
+        if (!cellId) { if (touch) { pendingTouchCell = null; setHoverCell(null); } return; }
+        if (touch && pendingTouchCell !== cellId) {
+          // first tap: show the placement preview (cost, legality, new routes) — nothing is spent yet
+          pendingTouchCell = cellId;
+          setHoverCell(cellId);
+          audio.play('click', { vol: 0.4 });
+          return;
+        }
         const t = u.tool;
-        const p = controller.preview(t, hit.cellId);
-        const cells = p?.cellIds ?? [hit.cellId];
+        const p = controller.preview(t, cellId);
+        const cells = p?.cellIds ?? [cellId];
         let ok: boolean;
-        if (t.type === 'build') ok = issue({ type: 'BUILD_TOWER', kind: t.kind, anchorCellId: hit.cellId }, cells);
-        else if (t.type === 'wall') ok = issue({ type: 'PLACE_WALL', cellId: hit.cellId }, cells);
+        if (t.type === 'build') ok = issue({ type: 'BUILD_TOWER', kind: t.kind, anchorCellId: cellId }, cells);
+        else if (t.type === 'wall') ok = issue({ type: 'PLACE_WALL', cellId }, cells);
         else {
-          const cur = controller.elevationOf(hit.cellId);
-          ok = issue({ type: 'SET_ELEVATION', cellId: hit.cellId, next: (t.type === 'raise' ? cur + 1 : cur - 1) as never }, cells);
+          const cur = controller.elevationOf(cellId);
+          ok = issue({ type: 'SET_ELEVATION', cellId, next: (t.type === 'raise' ? cur + 1 : cur - 1) as never }, cells);
         }
         if (ok && t.type === 'build') {
           const id = controller.state.towers[controller.state.towers.length - 1]!.id;
+          pendingTouchCell = null;
           u.set({ tool: { type: 'none' }, preview: null, selection: { type: 'tower', id } });
           scene.setPreview(null);
           scene.setSelection({ type: 'tower', id });
           if (u.tutorialStep < 2) u.set({ tutorialStep: 2 });
-        } else refreshPreview(hit.cellId);
+        } else if (touch) setHoverCell(cellId); // terrain tools: further taps on the same cell repeat
+        else refreshPreview(cellId);
         return;
       }
+      pendingTouchCell = null;
+      if (touch) setHoverCell(hit.cellId);
       if (hit.towerId) {
         u.set({ selection: { type: 'tower', id: hit.towerId } });
         scene.setSelection({ type: 'tower', id: hit.towerId });
@@ -215,13 +243,52 @@ export function GameView() {
       }
       audio.play('click', { vol: 0.5 });
     };
-    const onUp = (ev: PointerEvent) => { if (dragging) { dragging = null; canvas.releasePointerCapture(ev.pointerId); } };
+
+    const onDown = (ev: PointerEvent) => {
+      audio.unlock();
+      const touch = isTouch(ev);
+      markInput(touch);
+      if (scene.introPlaying) { scene.skipIntro(); useUi.getState().set({ introPlaying: false }); if (touch) return; }
+      if (touch) {
+        gestures.down(ev.pointerId, ev.clientX, ev.clientY, ev.timeStamp);
+        canvas.setPointerCapture(ev.pointerId);
+        ev.preventDefault();
+        return;
+      }
+      if (ev.button === 1 || (ev.button === 0 && ev.shiftKey)) {
+        dragging = { x: ev.clientX, y: ev.clientY, moved: false };
+        canvas.setPointerCapture(ev.pointerId);
+        ev.preventDefault();
+        return;
+      }
+      if (ev.button === 2) {
+        const u = useUi.getState();
+        u.set({ tool: { type: 'none' }, preview: null, selection: null });
+        scene.setPreview(null); scene.setSelection(null);
+        return;
+      }
+      if (ev.button !== 0) return;
+      primaryAt(ev.clientX, ev.clientY, false);
+    };
+    const onUp = (ev: PointerEvent) => {
+      if (isTouch(ev)) {
+        const tap = gestures.up(ev.pointerId, ev.clientX, ev.clientY, ev.timeStamp);
+        if (canvas.hasPointerCapture(ev.pointerId)) canvas.releasePointerCapture(ev.pointerId);
+        if (tap) primaryAt(tap.x, tap.y, true);
+        return;
+      }
+      if (dragging) { dragging = null; canvas.releasePointerCapture(ev.pointerId); }
+    };
+    const onCancel = (ev: PointerEvent) => { if (isTouch(ev)) gestures.cancel(ev.pointerId); else dragging = null; };
+    // a new tool (or none) invalidates a half-confirmed touch placement
+    const unsubTool = useUi.subscribe((s, prev) => { if (s.tool !== prev.tool) pendingTouchCell = null; });
     const onWheel = (ev: WheelEvent) => { ev.preventDefault(); scene.rig.zoomBy(ev.deltaY); };
     const onContext = (ev: Event) => ev.preventDefault();
 
     const keysDown = new Set<string>();
     const onKey = (ev: KeyboardEvent) => {
       const u = useUi.getState();
+      markInput(false);
       if ((ev.target as HTMLElement)?.tagName === 'INPUT') return;
       audio.unlock();
       if (scene.introPlaying) { scene.skipIntro(); u.set({ introPlaying: false }); return; }
@@ -272,6 +339,7 @@ export function GameView() {
     canvas.addEventListener('pointermove', onMove);
     canvas.addEventListener('pointerdown', onDown);
     canvas.addEventListener('pointerup', onUp);
+    canvas.addEventListener('pointercancel', onCancel);
     canvas.addEventListener('wheel', onWheel, { passive: false });
     canvas.addEventListener('contextmenu', onContext);
     window.addEventListener('keydown', onKey);
@@ -300,6 +368,8 @@ export function GameView() {
       canvas.removeEventListener('pointermove', onMove);
       canvas.removeEventListener('pointerdown', onDown);
       canvas.removeEventListener('pointerup', onUp);
+      canvas.removeEventListener('pointercancel', onCancel);
+      unsubTool();
       canvas.removeEventListener('wheel', onWheel);
       canvas.removeEventListener('contextmenu', onContext);
       window.removeEventListener('keydown', onKey);

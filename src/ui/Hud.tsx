@@ -20,6 +20,18 @@ const TOWER_BLURB: Record<TowerKind, string> = {
 };
 const ENEMY_NAMES: Record<EnemyKind, string> = { slime: ENEMY_DEFS.slime.name, runner: ENEMY_DEFS.runner.name, golem: ENEMY_DEFS.golem.name };
 
+function openMenu() {
+  const u = useUi.getState();
+  u.set({ pauseOpen: true });
+  if (u.phase === 'COMBAT') { controller.flags.paused = true; syncStore(); }
+  audio.play('click');
+}
+
+function cancelTool() {
+  useUi.getState().set({ tool: { type: 'none' }, preview: null });
+  runtime.scene?.setPreview(null);
+}
+
 function clearSelection() {
   useUi.getState().set({ selection: null });
   runtime.scene?.setSelection(null);
@@ -89,9 +101,9 @@ function TopRight() {
         </div>
       )}
       <div className="panel hud-cam">
-        <button className="icon-btn" title="向左旋轉 (Q)" onClick={() => runtime.scene?.rig.rotate(-1)}><RotateIcon dir={-1} /></button>
-        <button className="icon-btn" title="向右旋轉 (E)" onClick={() => runtime.scene?.rig.rotate(1)}><RotateIcon dir={1} /></button>
-        <button className="icon-btn" title="設定" onClick={() => { useUi.getState().set({ settingsOpen: true }); audio.play('click'); }}><GearIcon /></button>
+        <button className="icon-btn" title="向左旋轉 (Q)" aria-label="向左旋轉" onClick={() => runtime.scene?.rig.rotate(-1)}><RotateIcon dir={-1} /></button>
+        <button className="icon-btn" title="向右旋轉 (E)" aria-label="向右旋轉" onClick={() => runtime.scene?.rig.rotate(1)}><RotateIcon dir={1} /></button>
+        <button className="icon-btn" title="選單 (Esc)" aria-label="選單" onClick={openMenu}><GearIcon /></button>
       </div>
     </div>
   );
@@ -122,10 +134,11 @@ function Toolbar() {
   const phase = useUi((s) => s.phase);
   const canUndo = useUi((s) => s.canUndo);
   const prep = phase === 'PREPARE';
+  const touch = useUi((s) => s.touchUi);
   const [hoverKind, setHoverKind] = useState<TowerKind | null>(null);
   return (
     <div className={`hud-toolbar ${prep ? '' : 'locked'}`}>
-      {hoverKind && (
+      {hoverKind && !touch && (
         <div className="panel tower-tip">
           <div className="tower-tip-title">{TOWER_DEFS[hoverKind].name}</div>
           <div className="tower-tip-stats">
@@ -136,7 +149,7 @@ function Toolbar() {
           <div className="tower-tip-text">{TOWER_BLURB[hoverKind]}</div>
         </div>
       )}
-      <div className="panel toolbar-group">
+      <div className="panel toolbar-group towers">
         {TOWER_ORDER.map((k, i) => (
           <div key={k} onMouseEnter={() => setHoverKind(k)} onMouseLeave={() => setHoverKind(null)}>
             <ToolButton
@@ -152,7 +165,7 @@ function Toolbar() {
           </div>
         ))}
       </div>
-      <div className="panel toolbar-group">
+      <div className="panel toolbar-group terrain">
         <ToolButton active={tool.type === 'raise'} disabled={!prep} affordable={gold >= ECONOMY.raiseCost} hotkey="R" cost={ECONOMY.raiseCost} label="抬升" icon={<RaiseIcon />} onClick={() => setTool({ type: 'raise' })} tip="抬升地形一格：高地塔射程更遠" />
         <ToolButton active={tool.type === 'lower'} disabled={!prep} affordable={gold >= ECONOMY.lowerCost} hotkey="F" cost={ECONOMY.lowerCost} label="降低" icon={<LowerIcon />} onClick={() => setTool({ type: 'lower' })} tip="降低地形一格" />
         <ToolButton active={tool.type === 'wall'} disabled={!prep} affordable={gold >= ECONOMY.wallCost} hotkey="B" cost={ECONOMY.wallCost} label="木牆" icon={<WallIcon />} onClick={() => setTool({ type: 'wall' })} tip="擋路改變敵人路線，不可完全封死" />
@@ -260,6 +273,7 @@ function ToolHint() {
   const tool = useUi((s) => s.tool);
   const preview = useUi((s) => s.preview);
   const hover = useUi((s) => s.hover);
+  const touch = useUi((s) => s.touchUi);
   if (tool.type === 'none') {
     if (!hover) return null;
     return (
@@ -272,8 +286,13 @@ function ToolHint() {
   return (
     <div className={`hover-chip tool ${preview ? (preview.ok ? 'ok' : 'bad') : ''}`}>
       <b>{label}</b>
-      {preview ? (preview.ok ? <> · 花費 {preview.cost}{hover ? ` · 高度 ${hover.elevation}` : ''}</> : <> · {preview.message}</>) : <> · 選擇地塊</>}
-      <span className="chip-esc">右鍵/Esc 取消</span>
+      {preview ? (preview.ok ? <> · 花費 {preview.cost}{hover ? ` · 高度 ${hover.elevation}` : ''}</> : <> · {preview.message}</>) : <> · {touch ? '點選地塊預覽' : '選擇地塊'}</>}
+      {touch
+        ? <>
+            {preview?.ok && <span className="chip-confirm">再點一次同一格確認</span>}
+            <button className="chip-cancel" onClick={cancelTool} aria-label="取消">取消</button>
+          </>
+        : <span className="chip-esc">右鍵/Esc 取消</span>}
     </div>
   );
 }
@@ -311,12 +330,20 @@ const TUTORIAL = [
   '試試抬升地形（R）：高地塔射程更遠。斜線格代表視線被擋住。',
   '準備好了就按「開始波次」。',
 ];
+const TUTORIAL_TOUCH = [
+  '敵人會沿著發光路線走向守護之心。點下方的箭塔，再點路線旁的地塊。',
+  '先點一下會預覽位置與花費，再點同一格就會建造。轉角附近能打到更多敵人。',
+  '試試「抬升」地形：高地塔射程更遠。單指拖曳平移、雙指縮放或旋轉視角。',
+  '準備好了就按「開始波次」。',
+];
 function Tutorial() {
   const step = useUi((s) => s.tutorialStep);
   const phase = useUi((s) => s.phase);
   const waveIndex = useUi((s) => s.waveIndex);
   const intro = useUi((s) => s.introPlaying);
   const tool = useUi((s) => s.tool);
+  const touch = useUi((s) => s.touchUi);
+  const lines = touch ? TUTORIAL_TOUCH : TUTORIAL;
   useEffect(() => {
     if (step === 0 && tool.type === 'build') useUi.getState().set({ tutorialStep: 1 });
   }, [step, tool]);
@@ -324,7 +351,7 @@ function Tutorial() {
   return (
     <div className="panel tutorial">
       <span className="tutorial-step">{step + 1}/{TUTORIAL.length}</span>
-      <span>{TUTORIAL[step]}</span>
+      <span>{lines[step]}</span>
       <button className="link-btn" onClick={() => useUi.getState().set({ tutorialStep: step + 1 })}>{step + 1 < TUTORIAL.length ? '下一則' : '知道了'}</button>
     </div>
   );
@@ -438,12 +465,13 @@ function Victory() {
 /* ------------------------------------------------------------------ pause / settings */
 function PauseMenu() {
   const open = useUi((s) => s.pauseOpen);
+  const phase = useUi((s) => s.phase);
   if (!open) return null;
   const close = () => { useUi.getState().set({ pauseOpen: false }); controller.flags.paused = false; syncStore(); };
   return (
     <div className="modal-wrap dark" onClick={close}>
       <div className="panel modal pause" onClick={(e) => e.stopPropagation()}>
-        <div className="ribbon">暫停</div>
+        <div className="ribbon">{phase === 'COMBAT' ? '暫停' : '選單'}</div>
         <div className="modal-actions column">
           <button className="btn primary big" onClick={close}>繼續遊戲</button>
           <button className="btn" onClick={() => useUi.getState().set({ settingsOpen: true })}>設定</button>
@@ -527,11 +555,18 @@ export function SettingsPanel() {
 
 export function HelpPanel() {
   const open = useUi((s) => s.helpOpen);
+  const touch = useUi((s) => s.touchUi);
   if (!open) return null;
-  const rows: [string, string][] = [
+  const touchRows: [string, string][] = [
+    ['點工具', '選擇塔 / 抬升 / 降低 / 木牆（再點一次取消）'], ['點地塊', '預覽位置與花費'], ['再點同一格', '確認建造 / 改造'],
+    ['點塔或牆', '選取，可升級 / 出售 / 拆除'], ['單指拖曳', '平移視角'], ['雙指捏合', '縮放'], ['雙指旋轉', '旋轉視角 90°'],
+    ['⟲ ⟳ 按鈕', '旋轉視角'], ['⚙ 按鈕', '選單 / 設定'],
+  ];
+  const rows: [string, string][] = touch ? touchRows : [
     ['1 / 2 / 3', '選擇箭塔 / 冰晶塔 / 火砲塔'], ['R / F', '抬升 / 降低地形'], ['B', '放置木牆'], ['Ctrl+Z', '復原（準備期，最多 20 步）'],
     ['左鍵', '放置 / 選取'], ['右鍵 / Esc', '取消'], ['U / X', '升級 / 出售選取的塔'], ['Tab（按住）', '顯示所有塔射程'],
     ['Q / E', '旋轉視角'], ['滾輪 / + -', '縮放'], ['WASD / 中鍵拖曳', '平移'], ['Enter', '開始波次 / 繼續'], ['Space', '暫停'],
+    ['觸控', '單指拖曳平移、雙指縮放 / 旋轉、點兩下確認放置'],
   ];
   return (
     <div className="modal-wrap dark" onClick={() => useUi.getState().set({ helpOpen: false })}>
@@ -559,15 +594,17 @@ function CombatBanner() {
   const phase = useUi((s) => s.phase);
   const paused = useUi((s) => s.paused);
   const pauseOpen = useUi((s) => s.pauseOpen);
+  const touch = useUi((s) => s.touchUi);
   if (phase !== 'COMBAT' || !paused || pauseOpen) return null;
-  return <div className="paused-banner">已暫停 · 按 Space 繼續</div>;
+  return <div className="paused-banner">已暫停 · {touch ? '點 ▶ 繼續' : '按 Space 繼續'}</div>;
 }
 
 export function Hud() {
   const intro = useUi((s) => s.introPlaying);
   const scale = useUi((s) => s.settings.uiScale);
+  const touch = useUi((s) => s.touchUi);
   return (
-    <div className={`hud ${intro ? 'intro' : ''}`} style={{ ['--ui-scale' as string]: scale }}>
+    <div className={`hud ${intro ? 'intro' : ''} ${touch ? 'touch' : ''}`} style={{ ['--ui-scale' as string]: scale }}>
       <TopLeft />
       <TopRight />
       <Tutorial />
@@ -584,7 +621,7 @@ export function Hud() {
       <SettingsPanel />
       <HelpPanel />
       <PerfHud />
-      {intro && <div className="intro-skip">點擊或按任意鍵跳過</div>}
+      {intro && <div className="intro-skip">{touch ? '點一下畫面跳過' : '點擊或按任意鍵跳過'}</div>}
     </div>
   );
 }

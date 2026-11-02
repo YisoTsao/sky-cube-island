@@ -49,7 +49,7 @@ export class CameraRig {
   }
   /** Smooth wheel zoom between snapped levels. */
   zoomBy(delta: number) {
-    this.zoomTarget = MathUtils.clamp(this.zoomTarget * Math.exp(-delta * 0.0015), 0.7, 1.9);
+    this.zoomTarget = MathUtils.clamp(this.zoomTarget * Math.exp(-delta * 0.0015), 0.7, this.maxZoom);
     // snap index to nearest
     let best = 0;
     this.zoomLevels.forEach((z, i) => { if (Math.abs(z - this.zoomTarget) < Math.abs(this.zoomLevels[best]! - this.zoomTarget)) best = i; });
@@ -59,7 +59,7 @@ export class CameraRig {
 
   /** Pan in screen space (pixels → world). */
   pan(dxPx: number, dyPx: number, viewportHeightPx: number) {
-    const worldPerPx = (this.baseHalfHeight * 2) / this.zoom / viewportHeightPx;
+    const worldPerPx = (this.halfHeightBase * 2) / this.zoom / viewportHeightPx;
     const right = new Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     const fwd = new Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     this.target.addScaledVector(right, -dxPx * worldPerPx);
@@ -82,6 +82,15 @@ export class CameraRig {
 
   setAspect(aspect: number) { this.aspect = aspect; }
 
+  /**
+   * Visible half-height before zoom. On tall (portrait phone) viewports the frustum is widened
+   * so roughly the same island width stays on screen instead of a narrow vertical slice.
+   */
+  get portraitFit(): number { return this.aspect < 1.2 ? Math.min(2, 1.2 / this.aspect) : 1; }
+  get halfHeightBase(): number { return this.baseHalfHeight * this.portraitFit; }
+  /** Closest free zoom; portrait screens may zoom further so a single cell is finger-sized. */
+  get maxZoom(): number { return 1.9 * this.portraitFit; }
+
   update(dt: number) {
     if (this.yawT < 1) {
       this.yawT = Math.min(1, this.yawT + dt / 0.35);
@@ -98,7 +107,7 @@ export class CameraRig {
   private shakeTime = 0;
   private apply(dt: number) {
     this.shakeTime += dt;
-    const halfH = this.baseHalfHeight / this.zoom;
+    const halfH = this.halfHeightBase / this.zoom;
     const halfW = halfH * this.aspect;
     const cam = this.camera;
     cam.left = -halfW; cam.right = halfW; cam.top = halfH; cam.bottom = -halfH;
