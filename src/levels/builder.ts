@@ -1,6 +1,7 @@
 import type {
   ConnectorDef, ConnectorKind, Elevation, GridPos, LevelDef, LevelTheme, PlatformDef, SpawnEntry, SurfaceCell, WaveDef,
 } from '../domain/types';
+import { buildSpawnQueue } from '../simulation/waves';
 
 export const cellIdAt = (x: number, z: number): string => `c${x}_${z}`;
 
@@ -48,6 +49,30 @@ export interface LevelSpec {
 /** Spawn group helper: `count` enemies round-robin over `portals`, `every` ticks apart per portal. */
 export const group = (enemyKind: SpawnEntry['enemyKind'], count: number, portals: string[], every: number, delay = 0): SpawnEntry =>
   ({ enemyKind, count, portalIds: portals, intervalTicks: every, ...(delay ? { delayTicks: delay } : {}) });
+
+/**
+ * Stretch a wave's spacing (intervals and delays, uniformly) so its last spawn lands at or after
+ * `minSeconds`. Waves that are already long enough are returned unchanged.
+ */
+export function paced(wave: WaveDef, portalIds: readonly string[], minSeconds = 125): WaveDef {
+  const last = (w: WaveDef) => Math.max(...buildSpawnQueue(w, portalIds).map((q) => q.tick));
+  const target = minSeconds * 20;
+  const now = last(wave);
+  if (now >= target) return wave;
+  let f = target / Math.max(1, now);
+  for (let i = 0; i < 20; i++) {
+    const w: WaveDef = {
+      ...wave,
+      entries: wave.entries.map((e) => ({
+        ...e, intervalTicks: Math.max(1, Math.round(e.intervalTicks * f)),
+        ...(e.delayTicks ? { delayTicks: Math.round(e.delayTicks * f) } : {}),
+      })),
+    };
+    if (last(w) >= target) return w;
+    f *= 1.02;
+  }
+  throw new Error(`could not pace wave ${wave.id}`);
+}
 
 /** Deterministically build a LevelDef from an authoring map + legend (shared by every level). */
 export function buildLevel(spec: LevelSpec): LevelDef {

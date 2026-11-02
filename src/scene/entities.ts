@@ -141,9 +141,10 @@ export class EnemyView {
     this.body.castShadow = true;
     this.group.add(this.body);
     if (g.extra) {
-      const glowing = kind !== 'runner' && kind !== 'mole';
+      const glowing = kind !== 'runner' && kind !== 'mole' && kind !== 'bat';
       const extraMat = kind === 'mole' ? createVoxelMaterial({ bevel: 0.012 })
-        : glowing ? createVoxelMaterial({ emissiveStrength: kind === 'splitter' || kind === 'queen' ? 1.4 : kind === 'crab' ? 2 : 3 }) : this.mat;
+        : kind === 'bat' ? createVoxelMaterial({ bevel: 0.01 })
+          : glowing ? createVoxelMaterial({ emissiveStrength: kind === 'splitter' || kind === 'queen' ? 1.4 : kind === 'crab' || kind === 'frostGiant' ? 2 : 3 }) : this.mat;
       this.extra = new Mesh(g.extra, extraMat);
       this.extra.castShadow = true;
       if (kind === 'runner') this.extra.position.set(0, 0.36, -0.42);
@@ -161,7 +162,25 @@ export class EnemyView {
     else if (this.enraged) tint.set(1.0, 0.35, 0.25, 0.32 + Math.sin(this.t * 18) * 0.08);
     else tint.set(1, 1, 1, 0);
     const s = this.squash;
-    if (this.kind === 'mole') {
+    if (this.kind === 'bat') {
+      const bob = Math.sin(this.t * 5) * 0.08;
+      this.body.position.y = 0.35 + bob;
+      this.body.scale.setScalar(1 + s * 0.12);
+      if (this.extra) { this.extra.position.y = this.body.position.y; this.extra.scale.set(1, 1 + Math.sin(this.t * 26) * 0.9, 1); }
+    } else if (this.kind === 'phoenix') {
+      const bob = Math.sin(this.t * 2.2) * 0.1;
+      this.body.position.y = 0.25 + bob;
+      this.body.scale.set(1 + s * 0.05, 1 - s * 0.05, 1 + s * 0.05);
+      if (this.extra) { this.extra.position.y = this.body.position.y; this.extra.scale.set(1, 1 + Math.sin(this.t * 7) * 0.35, 1); }
+    } else if (this.kind === 'shaman') {
+      this.body.position.y = Math.abs(Math.sin(this.t * 5)) * 0.03;
+      this.body.rotation.z = Math.sin(this.t * 5) * 0.04;
+      if (this.extra) { this.extra.position.y = this.body.position.y + Math.sin(this.t * 3) * 0.04; this.extra.rotation.z = this.body.rotation.z; this.extra.scale.setScalar(1 + Math.sin(this.t * 6) * 0.08); }
+    } else if (this.kind === 'imp') {
+      this.body.position.y = Math.abs(Math.sin(this.t * 13)) * 0.07;
+      this.body.rotation.z = Math.sin(this.t * 13) * 0.08;
+      if (this.extra) { this.extra.position.y = this.body.position.y; this.extra.rotation.z = this.body.rotation.z; }
+    } else if (this.kind === 'mole') {
       this.burrowK += ((this.burrowed ? 1 : 0) - this.burrowK) * Math.min(1, dt * 9);
       const k = this.burrowK;
       this.body.position.y = -k * 0.55 + (moving ? Math.abs(Math.sin(this.t * 9)) * 0.03 : 0);

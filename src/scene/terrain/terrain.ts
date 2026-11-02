@@ -2,7 +2,7 @@ import { Group, Mesh, type BufferGeometry } from 'three';
 import type { LevelDef, SurfaceCell } from '../../domain/types';
 import { meshVoxels } from '../voxel/mesher';
 import { createVoxelMaterial, FLAG_EDITABLE, FLAG_EMISSIVE, FLAG_GRASS_SIDE, FLAG_NO_BEVEL, sharedUniforms, MAX_TERRAIN_ANIMS } from '../materials/voxel-material';
-import { pal, type PaletteKey } from '../palette';
+import { PALETTE, pal, type PaletteKey } from '../palette';
 
 /** Terrain voxels are half a cell wide and one height step (0.5) tall. */
 const VS = 0.5;
@@ -48,8 +48,14 @@ export class Terrain {
   private anims: { id: number; from: number; t: number; dur: number }[] = [];
   private readonly chunkCells = 8;
 
+  /** Grass top palette per level theme (snowfield / volcanic ash). */
+  private readonly surface: [PaletteKey, PaletteKey, PaletteKey];
+
   constructor(private data: TerrainData) {
     const { level } = data;
+    const theme = level.theme ?? 'day';
+    this.surface = theme === 'snow' ? ['snow', 'snowLight', 'snowShade'] : theme === 'ember' ? ['ash', 'ashLight', 'ashDark'] : ['grass', 'grassLight', 'grassDark'];
+    sharedUniforms.uGrassSide.value.setHex(theme === 'snow' ? PALETTE.snowSide : theme === 'ember' ? PALETTE.ashSide : PALETTE.grassSide);
     this.nx = level.width * SUB;
     this.nz = level.depth * SUB;
     this.vol = new Uint8Array(this.nx * this.nz * NY);
@@ -209,7 +215,8 @@ export class Terrain {
           case M_GRASS: {
             if (top) {
               const n = vnoise(x * 0.18, z * 0.18);
-              const k: PaletteKey = n > 0.68 ? 'grassLight' : n < 0.3 ? 'grassDark' : 'grass';
+              const [g, gl, gd] = this.surface;
+              const k: PaletteKey = n > 0.68 ? gl : n < 0.3 ? gd : g;
               set(k, jit * (0.96 + hash2(x * 3.1, z * 1.7) * 0.08), out);
             } else set(bottom ? 'soil' : 'dirt', jit, out);
             return;

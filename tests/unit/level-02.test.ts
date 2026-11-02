@@ -29,7 +29,9 @@ describe('campaign levels', () => {
   });
   it('runs in campaign order', () => {
     expect(nextLevelId('L1-01')).toBe('L1-02');
-    expect(nextLevelId('L1-02')).toBeNull();
+    expect(nextLevelId('L1-02')).toBe('L1-03');
+    expect(nextLevelId('L1-03')).toBe('L1-04');
+    expect(nextLevelId('L1-04')).toBeNull();
   });
 });
 

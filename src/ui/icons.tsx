@@ -63,6 +63,24 @@ export function EnemyIcon({ kind, size = 22 }: { kind: EnemyKind; size?: number 
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden><path d="M3 14c2-3 6-4 11-3l4 1c2 .5 3 1.5 3 2.5S20 16 18 16l-4 .5c-5 .5-9-.5-11-2.5Z" fill="#ff5d3a" stroke="#c23a22" strokeWidth="1.3" strokeLinejoin="round" /><path d="M3 14c-1-3 0-6 1-8 0 2 1 3 2 4" fill="#ffb030" stroke="#ff8a1a" strokeWidth="1" /><circle cx="18" cy="13" r="1" fill="#1d2333" /><path d="M8 16l-1 3M14 16.5l1 3" stroke="#c23a22" strokeWidth="1.5" strokeLinecap="round" /></svg>
   );
   if (kind === 'queen') return blob(size, '#5fd8c0', '#2fa58e', <><path d="M7 7 8 3l2 3 2-4 2 4 2-3 1 4Z" fill="#f2c14e" stroke="#c9932f" strokeWidth=".8" strokeLinejoin="round" /><circle cx="9" cy="17" r="1.5" fill="#b07aff" /><circle cx="15" cy="17" r="1.5" fill="#b07aff" /></>);
+  if (kind === 'bat') return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden><path d="M1 9c3 0 4 2 5 4 1-2 3-3 6-3s5 1 6 3c1-2 2-4 5-4-1 4-3 7-6 7l-1 2-4-1-4 1-1-2c-3 0-5-3-6-7Z" fill="#5b4f86" stroke="#3a3160" strokeWidth="1.2" strokeLinejoin="round" /><circle cx="10" cy="12" r="1" fill="#fff" /><circle cx="14" cy="12" r="1" fill="#fff" /></svg>
+  );
+  if (kind === 'yeti') return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden><path d="M3 21V11c0-5 4-8 9-8s9 3 9 8v10Z" fill="#eef3fa" stroke="#9fb0c8" strokeWidth="1.4" /><rect x="7" y="8" width="10" height="7" rx="2" fill="#6f8fb8" /><circle cx="10" cy="11" r="1" fill="#1d2333" /><circle cx="14" cy="11" r="1" fill="#1d2333" /><path d="M10 13.5h4" stroke="#fff" strokeWidth="1.2" /><path d="M5 5 4 2M19 5l1-3" stroke="#d8cbb0" strokeWidth="2" strokeLinecap="round" /></svg>
+  );
+  if (kind === 'shaman') return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden><path d="M4 22 7 9h8l3 13Z" fill="#7a5ab0" stroke="#4e3a7a" strokeWidth="1.3" strokeLinejoin="round" /><circle cx="11" cy="7" r="4" fill="#4e3a7a" /><rect x="8.5" y="6" width="5" height="3" rx="1" fill="#f2d27a" /><path d="M20 22V7" stroke="#825a37" strokeWidth="1.6" /><circle cx="20" cy="5" r="3" fill="#9fd8ff" stroke="#2fb8ff" strokeWidth="1" /></svg>
+  );
+  if (kind === 'frostGiant') return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden><rect x="2" y="7" width="20" height="13" rx="2" fill="#9cc6e8" stroke="#5f8fbf" strokeWidth="1.5" /><path d="M4 7 6 1l2 6 2-5 2 5 2-5 2 5 2-6 2 6Z" fill="#d6f4ff" stroke="#5f8fbf" strokeWidth=".9" strokeLinejoin="round" /><rect x="7" y="11" width="3" height="2" fill="#b8f1ff" /><rect x="14" y="11" width="3" height="2" fill="#b8f1ff" /></svg>
+  );
+  if (kind === 'imp') return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden><path d="M6 21v-9a6 6 0 0 1 12 0v9Z" fill="#d8452a" stroke="#8a2416" strokeWidth="1.4" /><path d="M7 8 5 3l4 3M17 8l2-5-4 3" fill="#2e2226" /><circle cx="10" cy="11" r="1.2" fill="#ffa21f" /><circle cx="14" cy="11" r="1.2" fill="#ffa21f" /><rect x="9.5" y="15" width="5" height="3" rx="1" fill="#ffa21f" /></svg>
+  );
+  if (kind === 'phoenix') return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden><path d="M1 8c4 0 7 2 9 5M23 8c-4 0-7 2-9 5" stroke="#ffc23a" strokeWidth="2.6" strokeLinecap="round" fill="none" /><ellipse cx="12" cy="14" rx="4" ry="5" fill="#ff6a2a" stroke="#c8301e" strokeWidth="1.2" /><circle cx="12" cy="8" r="2.6" fill="#c8301e" /><path d="M12 5.5 11 2l2 1 1-2v4" fill="#ffc23a" /><path d="M10 19l2 4 2-4" fill="#ffa21f" /></svg>
+  );
   if (kind === 'runner') return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden><path d="M2 14 7 9h9l5 3-2 3h-3l-1 5h-2l-1-4H9l-2 4H5l1-5Z" fill="#ff9a3c" stroke="#d8691f" strokeWidth="1.2" strokeLinejoin="round" /><circle cx="17.5" cy="11.5" r="1" fill="#1d2333" /></svg>
   );

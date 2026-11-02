@@ -39,6 +39,17 @@ export const PALETTE = {
   mole: 0x6b5446, moleDark: 0x4a382e, moleNose: 0xff9fb0, claw: 0xe8dcc2,
   salamander: 0xff5d3a, salamanderDark: 0xc23a22, salamanderBelly: 0xffc25a, flame: 0xffb030,
   queen: 0x5fd8c0, queenDark: 0x2fa58e, queenLight: 0xb4f5e6,
+  bat: 0x5b4f86, batDark: 0x3a3160, batWing: 0x8a7cc0,
+  yeti: 0xeef3fa, yetiShade: 0xc2d0e2, yetiFace: 0x6f8fb8, horn: 0xd8cbb0,
+  shaman: 0x7a5ab0, shamanDark: 0x4e3a7a, shamanMask: 0xf2d27a, shield: 0x9fd8ff,
+  frostGiant: 0x9cc6e8, frostGiantDark: 0x5f8fbf, ice: 0xd6f4ff,
+  imp: 0xd8452a, impDark: 0x8a2416, impHorn: 0x2e2226, lava: 0xffa21f,
+  phoenix: 0xff6a2a, phoenixGold: 0xffc23a, phoenixDeep: 0xc8301e,
+  // terrain themes
+  snow: 0xeef4fb, snowLight: 0xffffff, snowShade: 0xd2e0ef, snowSide: 0xdfe9f4,
+  pine: 0x2f6b4f, pineDark: 0x214f3a,
+  ash: 0x6c5a52, ashLight: 0x86726a, ashDark: 0x4c3e3a, ashSide: 0x5a4842,
+  autumn: 0xd8662e, autumnLight: 0xf29a3c, autumnDark: 0x9c3a20,
   eye: 0x1d2333, white: 0xffffff,
   // sky
   skyTop: 0x5aa8ff, skyMid: 0x9fd0ff, skyHorizon: 0xe3f2ff, skyDeep: 0x3f8fe0, cloud: 0xffffff, cloudShade: 0xb2cbec,
@@ -57,7 +68,7 @@ export function pal(key: PaletteKey | number): Color {
 
 /** Tactical-overlay colours (never tone-mapped / graded; GDD §11.3). */
 export const TACTICAL = {
-  routeA: 0xffd34a, routeB: 0x5fd0ff, routeC: 0xff8fd8, legal: 0x5cf08a, illegal: 0xff4d5e, select: 0xffffff,
+  routeA: 0xffd34a, routeB: 0x5fd0ff, routeC: 0xff8fd8, routeD: 0x9cff6a, legal: 0x5cf08a, illegal: 0xff4d5e, select: 0xffffff,
   rangeVisible: 0x8ff0ff, rangeOccluded: 0xff7a7a, rangeHigh: 0xfff2a0,
   hpGood: 0x66e06a, hpMid: 0xffd34a, hpLow: 0xff5a4f, hpBack: 0x1b1f2a, frost: 0x9ee8ff,
 } as const;

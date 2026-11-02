@@ -83,6 +83,10 @@ export function analyseFailure(ctx: FailureContext): string {
   }
   const bosses = ctx.stats.leakKinds.boss ?? 0;
   if (bosses > 0) return `${ctx.portalName(portalId)} 的岩王巨像突破了防線：牠不怕緩速，集中升級到 3 級的塔並在路線上多鋪火力。`;
+  const bigs = (ctx.stats.leakKinds.frostGiant ?? 0) + (ctx.stats.leakKinds.phoenix ?? 0);
+  if (bigs > 0) return `${ctx.portalName(portalId)} 的頭目突破了防線：冰霜巨人不吃緩速、不死火鳥會重生一次，在牠的路線上集中 3 級塔。`;
+  const shamans = ctx.stats.leakKinds.shaman ?? 0;
+  if (shamans >= 2) return `${ctx.portalName(portalId)} 漏了 ${count} 隻，護盾薩滿替同伴擋傷害：先用射程長的箭塔點掉薩滿。`;
   const queens = ctx.stats.leakKinds.queen ?? 0;
   if (queens > 0) return `${ctx.portalName(portalId)} 的史萊姆女王突破了防線：她倒下時會分裂，留足砲塔的範圍火力收拾分裂體。`;
   const ghosts = ctx.stats.leakKinds.ghost ?? 0;

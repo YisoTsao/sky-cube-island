@@ -32,6 +32,12 @@ const ENEMY_TRAIT: Partial<Record<EnemyKind, string>> = {
   mole: '每 5 秒鑽入地底 2 秒，期間無法被攻擊',
   salamander: '完全無視緩速，跑得很快',
   queen: '第二關頭目：倒下時分裂成 3 隻分裂史萊姆',
+  bat: '成群高速飛行，血量很低，適合砲塔與箭塔清場',
+  yeti: '無視緩速、抗魔法 40%，皮粗肉厚',
+  shaman: '讓身邊的同伴受到的傷害減少 35%，優先擊倒',
+  frostGiant: '第三關頭目：完全無視緩速，物抗 30%',
+  imp: '速度快的小惡魔，物抗 30%，用冰晶塔對付',
+  phoenix: '第四關頭目：第一次倒下會浴火重生，恢復 60% 生命',
 };
 const ENEMY_NAMES = Object.fromEntries(Object.values(ENEMY_DEFS).map((d) => [d.kind, d.name])) as Record<EnemyKind, string>;
 

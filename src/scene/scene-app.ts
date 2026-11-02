@@ -48,7 +48,14 @@ const ENEMY_SHARDS: Record<string, PaletteKey[]> = {
   mole: ['mole', 'moleDark', 'claw'],
   salamander: ['salamander', 'salamanderDark', 'salamanderBelly', 'flame'],
   queen: ['queen', 'queenLight', 'queenDark', 'gold'],
+  bat: ['bat', 'batDark', 'batWing'],
+  yeti: ['yeti', 'yetiShade', 'yetiFace', 'horn'],
+  shaman: ['shaman', 'shamanDark', 'shamanMask', 'shield'],
+  frostGiant: ['frostGiant', 'frostGiantDark', 'ice', 'snow'],
+  imp: ['imp', 'impDark', 'lava'],
+  phoenix: ['phoenix', 'phoenixGold', 'phoenixDeep', 'lava'],
 };
+const BIG_KINDS = new Set<string>(['boss', 'queen', 'frostGiant', 'phoenix']);
 const TOWER_SHARDS: Record<string, PaletteKey[]> = {
   arrow: ['wood', 'woodDark', 'plank', 'rock'],
   frost: ['crystal', 'stone', 'crystalLight', 'stoneDark'],
@@ -207,9 +214,10 @@ export class SceneApp {
     const leafMat = createVoxelMaterial({ bevel: 0.012, wind: { base: 0.2, strength: 0.025 } });
     const rockMat = createVoxelMaterial({ bevel: 0.012 });
     const decor = this.level.decor;
+    const theme = this.level.theme ?? 'day';
     decor?.trees.forEach((t, i) => {
       const id = `c${t.x}_${t.z}`;
-      const geo = treeGeometry(i);
+      const geo = treeGeometry(i, theme === 'snow' ? 'snow' : theme === 'ember' ? 'autumn' : 'green');
       const g = new Group();
       const trunk = new Mesh(geo.trunk, trunkMat);
       const leaves = new Mesh(geo.leaves, leafMat);
@@ -230,7 +238,12 @@ export class SceneApp {
       this.decor.add(m);
     });
     // flowers & grass tufts scattered on grass cells (purely decorative, tiny)
-    const geos: BufferGeometry[] = [grassTuftGeometry(), flowerGeometry('flowerY'), flowerGeometry('flowerP'), flowerGeometry('flowerW'), flowerGeometry('flowerV')];
+    // snowfields get frosty tufts and pale blooms; volcanic ash gets ember sprouts
+    const geos: BufferGeometry[] = theme === 'snow'
+      ? [grassTuftGeometry(['snowShade', 'snowLight', 'pine']), grassTuftGeometry(['ice', 'snowLight', 'snowShade']), flowerGeometry('flowerW'), flowerGeometry('flowerV'), grassTuftGeometry(['pine', 'snow', 'pineDark'])]
+      : theme === 'ember'
+        ? [grassTuftGeometry(['ashLight', 'ashDark', 'autumnDark']), grassTuftGeometry(['autumn', 'autumnLight', 'autumnDark']), flowerGeometry('flowerY'), grassTuftGeometry(['lava', 'autumnLight', 'ashDark']), grassTuftGeometry(['ashDark', 'ash', 'autumn'])]
+        : [grassTuftGeometry(), flowerGeometry('flowerY'), flowerGeometry('flowerP'), flowerGeometry('flowerW'), flowerGeometry('flowerV')];
     const counts = geos.map(() => 0);
     const picks: typeof this.flowerCells = [];
     const hash = (a: number, b: number) => { const h = Math.sin(a * 91.7 + b * 47.3) * 43758.5453; return h - Math.floor(h); };
@@ -555,6 +568,17 @@ export class SceneApp {
           });
           break;
         }
+        case 'ENEMY_REBORN': {
+          const v = this.enemies.get(e.enemyId);
+          if (v) {
+            const p = v.group.position.clone().add(new Vector3(0, v.height * 0.5, 0));
+            this.vfx.sparks(p, new Color(4, 1.8, 0.4), 40, { speed: 2.4, up: 2.6, life: 0.6, size: 0.1 });
+            this.vfx.ring(v.group.position.clone(), 1.6, 'lantern', 0.5);
+            this.rig.addTrauma(0.25);
+            v.hit();
+          }
+          break;
+        }
         case 'ENEMY_HEALED': {
           const v = this.enemies.get(e.enemyId);
           if (v && !reduced) this.vfx.sparks(v.group.position.clone().add(new Vector3(0, v.height * 0.7, 0)), 'wisp', 5, { speed: 0.6, up: 1.4 });
@@ -581,8 +605,8 @@ export class SceneApp {
             const v = this.enemies.get(id);
             if (v) {
               const p = v.group.position.clone().add(new Vector3(0, v.height * 0.5, 0));
-              this.vfx.shatter(p, ENEMY_SHARDS[kind]!, kind === 'boss' || kind === 'queen' ? 80 : kind === 'golem' || kind === 'crab' ? 34 : kind === 'mini' ? 10 : 22, { speed: kind === 'runner' ? 3 : 2.2, up: 2.8 });
-              if (kind === 'boss' || kind === 'queen') this.rig.addTrauma(0.4);
+              this.vfx.shatter(p, ENEMY_SHARDS[kind]!, BIG_KINDS.has(kind) ? 80 : kind === 'golem' || kind === 'crab' ? 34 : kind === 'mini' ? 10 : 22, { speed: kind === 'runner' ? 3 : 2.2, up: 2.8 });
+              if (BIG_KINDS.has(kind)) this.rig.addTrauma(0.4);
               this.vfx.sparks(p, 'gold', 6, { speed: 1.2, up: 2 });
               this.hooks.onCoins?.(this.screenOf(p), gold);
               this.scene.remove(v.group);
@@ -721,7 +745,7 @@ export class SceneApp {
       const maxHp = e.maxHp ?? this.maxHp(e.kind);
       v.hpRatio = e.hp / maxHp;
       v.update(dt, true, v.slowed ? 0.7 : 1);
-      if (e.hp < maxHp && !v.burrowed) bars.push({ pos: pos.clone().add(new Vector3(0, v.height + 0.3, 0)), ratio: v.hpRatio, slowed: v.slowed, width: e.kind === 'boss' || e.kind === 'queen' ? 2 : e.kind === 'golem' || e.kind === 'crab' ? 1.25 : e.kind === 'mini' ? 0.7 : 1 });
+      if (e.hp < maxHp && !v.burrowed) bars.push({ pos: pos.clone().add(new Vector3(0, v.height + 0.3, 0)), ratio: v.hpRatio, slowed: v.slowed, width: BIG_KINDS.has(e.kind) ? 2 : e.kind === 'golem' || e.kind === 'crab' || e.kind === 'yeti' ? 1.25 : e.kind === 'mini' ? 0.7 : 1 });
     }
     for (const [id, v] of this.enemies) {
       if (live.has(id)) continue;
