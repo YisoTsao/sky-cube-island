@@ -48,6 +48,8 @@ export interface UiState {
   perf: { fps: number; ms: number; calls: number; tris: number; dpr: number } | null;
   coinPulse: number;
   heartPulse: number;
+  /** True while the player is using touch (last pointer was a finger/pen, or a coarse-pointer device). */
+  touchUi: boolean;
   set(p: Partial<UiState>): void;
   toast(text: string, kind?: Toast['kind']): void;
 }
@@ -78,6 +80,7 @@ export const useUi = create<UiState>((set, get) => ({
   failureText: null,
   stars: 0,
   hasSave: false,
+  touchUi: typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches,
   hasCheckpoint: false,
   introPlaying: false,
   qualityLabel: 'high',

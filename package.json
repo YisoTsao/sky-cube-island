@@ -12,7 +12,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "e2e": "node tests/e2e/run-e2e.mjs"
+    "e2e": "node tests/e2e/run-e2e.mjs",
+    "e2e:mobile": "node tests/e2e/run-e2e-mobile.mjs"
   },
   "dependencies": {
     "n8ao": "^2.0.1",

@@ -7,3 +7,4 @@ tests/e2e/__out__
 .DS_Store
 tsconfig.tsbuildinfo
 tests/e2e/last-run.png
+tests/e2e/mobile-*.png
