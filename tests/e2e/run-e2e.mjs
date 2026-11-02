@@ -18,6 +18,8 @@ try {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  const badAudio = [];
+  page.on('response', (res) => { if (res.url().includes('/audio/') && !res.ok()) badAudio.push(`${res.status()} ${res.url()}`); });
 
   await page.goto(`http://localhost:${PORT}/`);
   await page.getByText('開始遊戲').click();
@@ -37,6 +39,10 @@ try {
   const towers = await page.evaluate(() => window.__sky.controller.state.towers.length);
   if (towers !== 1) fail(`undo expected 1 tower, got ${towers}`);
 
+  // recorded CC0 music + SFX load after the first click and replace the synth fallback
+  await page.waitForFunction(() => window.__sky.audio.usingRecordedMusic, null, { timeout: 20000 })
+    .catch(() => fail('recorded music did not load'));
+  if (badAudio.length) fail('audio requests failed:\n' + badAudio.join('\n'));
   await page.getByText('開始波次').click();
   await wait(1500);
   const phase = await page.evaluate(() => window.__sky.controller.state.phase);
