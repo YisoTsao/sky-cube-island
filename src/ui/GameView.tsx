@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { CellId, GameCommand, TowerKind } from '../domain/types';
+import { TARGETING_MODES } from '../domain/types';
 import { controller, level, runtime, syncStore } from '../app/runtime';
 import { SceneApp } from '../scene/scene-app';
 import type { QualityLevel } from '../scene/render/pipeline';
@@ -334,8 +335,14 @@ export function GameView() {
       if (k === 'tab') { ev.preventDefault(); if (!u.showAllRanges) { u.set({ showAllRanges: true }); scene.setShowAllRanges(true); } return; }
       if (keysDown.has(k)) return;
       keysDown.add(k);
-      const towerKeys: Record<string, TowerKind> = { '1': 'arrow', '2': 'frost', '3': 'cannon' };
+      const towerKeys: Record<string, TowerKind> = { '1': 'arrow', '2': 'frost', '3': 'cannon', '4': 'lightning', '5': 'wind' };
       if (towerKeys[k]) setTool({ type: 'build', kind: towerKeys[k]! });
+      else if (k === 't') {
+        // cycle the selected tower's targeting mode
+        const sel = u.selection;
+        const tw = sel?.type === 'tower' ? controller.state.towers.find((x) => x.id === sel.id) : undefined;
+        if (tw) issue({ type: 'SET_TARGETING', towerId: tw.id, targeting: TARGETING_MODES[(TARGETING_MODES.indexOf(tw.targeting) + 1) % TARGETING_MODES.length]! });
+      }
       else if (k === 'r') setTool({ type: 'raise' });
       else if (k === 'f') setTool({ type: 'lower' });
       else if (k === 'b') setTool({ type: 'wall' });
@@ -399,7 +406,7 @@ export function GameView() {
         audio.setVolumes(s.settings.volume);
       }
     });
-    (window as unknown as { __sky: unknown }).__sky = { controller, scene, useUi };
+    (window as unknown as { __sky: unknown }).__sky = { controller, scene, useUi, audio };
     return () => {
       cancelAnimationFrame(raf);
       clearInterval(panKeys);

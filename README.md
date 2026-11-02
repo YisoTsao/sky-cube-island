@@ -28,11 +28,12 @@ https://yisotsao.github.io/sky-cube-island/ （手機瀏覽器可直接開啟）
 
 | 按鍵 | 功能 |
 |---|---|
-| 1 / 2 / 3 | 箭塔／冰晶塔／岩石砲塔 |
+| 1 / 2 / 3 / 4 / 5 | 箭塔／冰晶塔／岩石砲塔／雷光塔／風車塔 |
 | R / F | 抬升／降低地形 |
 | B | 木牆 |
 | Ctrl+Z | 復原（準備期最多 20 步） |
 | U / X | 升級／出售選取的塔 |
+| T | 切換選取的塔的索敵模式（最前／最後／最強／最近） |
 | Tab（按住） | 顯示所有射程 |
 | Q / E、滾輪、WASD | 旋轉、縮放、平移 |
 | Enter / Space / Esc | 開始波次／暫停／取消 |
@@ -54,7 +55,7 @@ https://yisotsao.github.io/sky-cube-island/ （手機瀏覽器可直接開啟）
 
 - `src/domain`、`src/levels`、`src/navigation`、`src/commands`、`src/simulation`、`src/session`：純 TypeScript 模擬核心（20 TPS、確定性），不依賴 three 或 React，ESLint 強制。
 - `src/scene`：Three.js 呈現層（貪婪體素網格＋烘焙 AO、shader 倒角、雲海、後處理、戰術疊層、VFX），只透過 `GameEvent` 與 `SceneFeed` 讀資料。
-- `src/audio`：程序合成音效與音樂。
+- `src/audio`：音效與自適應音樂。錄音素材為 CC0（來源見 `public/audio/CREDITS.md`），未載入時退回程序合成。
 - `src/ui`：React HUD（zustand 低頻狀態）。
 
 設計規格見 `docs/01_GAME_DESIGN_DOCUMENT.md`、`docs/02_TECHNICAL_ARCHITECTURE.md`；現行塔與怪物數值、等級外觀見 `docs/03_TOWERS_AND_ENEMIES.md`；實作決策見 `docs/DECISIONS.md`。

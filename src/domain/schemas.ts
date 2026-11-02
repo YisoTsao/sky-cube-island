@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const elevation = z.number().int().min(0).max(6);
 const gridPos = z.object({ x: z.number().int(), z: z.number().int() });
-const towerKind = z.enum(['arrow', 'frost', 'cannon']);
+const towerKind = z.enum(['arrow', 'frost', 'cannon', 'lightning', 'wind']);
 const enemyKind = z.enum(['slime', 'runner', 'golem', 'mini', 'splitter', 'knight', 'wisp', 'boss', 'boar', 'ghost', 'crab', 'mole', 'salamander', 'queen', 'bat', 'yeti', 'shaman', 'frostGiant', 'imp', 'phoenix']);
 
 export const SurfaceCellSchema = z.object({
@@ -79,7 +79,7 @@ export const GameStateSchema = z.object({
     footprintCellIds: z.array(z.string()).length(4),
     level: z.union([z.literal(1), z.literal(2), z.literal(3)]),
     cooldownTicks: z.number().int().min(0), investedGold: z.number().int().min(0),
-    targeting: z.literal('FIRST'), builtWave: z.number().int().min(0),
+    targeting: z.enum(['FIRST', 'LAST', 'STRONGEST', 'CLOSEST']), builtWave: z.number().int().min(0),
   })),
   enemies: z.array(z.any()).max(0, 'Saves never contain live enemies (COMBAT is not a save point).'),
   nextEntityId: z.number().int().min(0),

@@ -31,6 +31,7 @@ export class TowerView {
   private targetYaw = 0;
   private idleT = Math.random() * 10;
   private charge = 0;
+  private spin = Math.random() * 6;
   blockedT = 0;
   headY = 1.6;
 
@@ -60,7 +61,7 @@ export class TowerView {
     add(parts.body, mats.body);
     add(parts.glow, mats.glow);
     add(parts.cloth, mats.cloth);
-    this.headMesh = new Mesh(parts.head, this.kind === 'frost' ? mats.glow : mats.body);
+    this.headMesh = new Mesh(parts.head, this.kind === 'frost' || this.kind === 'lightning' ? mats.glow : mats.body);
     this.headMesh.castShadow = true;
     this.head.add(this.headMesh);
     this.head.position.y = parts.headY;
@@ -105,6 +106,18 @@ export class TowerView {
       this.headMesh.scale.setScalar(1 + this.charge * 0.25);
     }
     if (this.kind === 'cannon') this.headMesh.rotation.x = -0.12;
+    if (this.kind === 'lightning') {
+      this.charge = Math.max(0, this.charge - dt * 4);
+      this.headMesh.position.y = Math.sin(this.idleT * 3) * 0.04;
+      this.headMesh.rotation.y = this.idleT * 2.4;
+      this.headMesh.scale.setScalar(1 + this.charge * 0.4 + Math.sin(this.idleT * 17) * 0.03);
+    }
+    if (this.kind === 'wind') {
+      // sails always turn; a gust spins them up briefly
+      this.charge = Math.max(0, this.charge - dt * 1.2);
+      this.spin += dt * (1.2 + this.charge * 9);
+      this.headMesh.rotation.z = this.spin;
+    }
     this.blockedT = Math.max(0, this.blockedT - dt);
   }
 }

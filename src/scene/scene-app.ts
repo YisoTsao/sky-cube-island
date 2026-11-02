@@ -3,7 +3,7 @@ import {
   Color, CanvasTexture, Sprite, SpriteMaterial, type BufferGeometry,
 } from 'three';
 import type { CellId, EnemyInstance, EnemyKind, GameEvent, GameState, LevelDef } from '../domain/types';
-import { ENEMY_DEFS, isBurrowed, isEnraged } from '../domain/definitions';
+import { ENEMY_DEFS, LEVEL_RANGE_BONUS, TOWER_DEFS, isBurrowed, isEnraged } from '../domain/definitions';
 import { HEIGHT_STEP_WORLD } from '../domain/types';
 import type { PreviewInfo, RangeCell, SceneFeed } from '../presentation/feed';
 import { RenderPipeline, QUALITY, type QualityLevel } from './render/pipeline';
@@ -60,6 +60,8 @@ const TOWER_SHARDS: Record<string, PaletteKey[]> = {
   arrow: ['wood', 'woodDark', 'plank', 'rock'],
   frost: ['crystal', 'stone', 'crystalLight', 'stoneDark'],
   cannon: ['rock', 'iron', 'rockLight', 'woodDark'],
+  lightning: ['copper', 'iron', 'rock', 'volt'],
+  wind: ['plank', 'sail', 'woodDark', 'rock'],
 };
 
 /**
@@ -532,6 +534,7 @@ export class SceneApp {
           t.fire();
           const muzzle = t.muzzleWorld(new Vector3());
           const dur = e.travelTicks / 20 / speed;
+          if (t.kind === 'lightning' || t.kind === 'wind') break; // drawn by LIGHTNING_CHAINED / WIND_GUST
           this.vfx.projectile(t.kind, muzzle, target, dur);
           if (t.kind === 'cannon') { this.vfx.smoke(muzzle, 5); this.vfx.ring(t.group.position, 1.1, 'stoneLight', 0.3); }
           if (t.kind === 'frost') this.vfx.sparks(muzzle, 'crystalLight', 6, { speed: 0.8 });
@@ -598,6 +601,31 @@ export class SceneApp {
           });
           break;
         }
+        case 'LIGHTNING_CHAINED': {
+          const t = this.towers.get(e.towerId);
+          const pts = e.points.map((p) => new Vector3(p.x, p.y, p.z));
+          if (t && pts.length) pts[0] = t.group.position.clone().add(new Vector3(0, t.headY, 0));
+          this.vfx.bolt(pts);
+          for (let i = 1; i < pts.length; i++) this.vfx.sparks(pts[i]!, 'volt', reduced ? 3 : 8, { speed: 1.8, up: 1.2, life: 0.3, size: 0.05 });
+          break;
+        }
+        case 'WIND_GUST': {
+          const t = this.towers.get(e.towerId);
+          if (!t) break;
+          const tw = ctx.state.towers.find((x) => x.id === e.towerId);
+          const r = TOWER_DEFS.wind.baseRangeWorld + (tw ? LEVEL_RANGE_BONUS[tw.level] : 0);
+          this.vfx.gust(t.group.position, r, reduced ? 10 : 26);
+          this.vfx.ring(t.group.position, r, 'cloud', 0.45);
+          break;
+        }
+        case 'ENEMY_KNOCKED_BACK': {
+          const id = e.enemyId;
+          this.queue(0.1 / speed, () => {
+            const v = this.enemies.get(id);
+            if (v) this.vfx.dust(v.group.position.clone(), 0.5, reduced ? 4 : 10, 'cloud');
+          });
+          break;
+        }
         case 'ENEMY_KILLED': {
           const id = e.enemyId; const kind = e.kind; const gold = e.gold;
           this.dying.add(id);
@@ -653,7 +681,7 @@ export class SceneApp {
   private maxHp(kind?: EnemyKind) { return kind ? ENEMY_DEFS[kind].hp : 60; }
   private travelDelay(towerId: string, s: GameState): number {
     const t = s.towers.find((x) => x.id === towerId);
-    const ticks = t?.kind === 'cannon' ? 8 : t?.kind === 'frost' ? 5 : 4;
+    const ticks = t ? TOWER_DEFS[t.kind].projectileTicks : 4;
     return ticks / 20 / this.feed.flags.speed;
   }
   private travelDelayById(_enemyId: string, _s: GameState) { return 5 / 20 / this.feed.flags.speed; }

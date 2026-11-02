@@ -191,12 +191,105 @@ function cannonTower(level: TowerLevel): TowerParts {
   };
 }
 
+/** Lightning (雷光塔): copper tesla coil on a stone plinth; head = floating charged orb. */
+function lightningTower(level: TowerLevel): TowerParts {
+  const body = new VoxelModel(32, 28, 32);
+  stoneBase(body, 4, 3);
+  body.box(9, 5, 9, 22, 6, 22, 'rockDark', true);
+  // central coil column with copper windings
+  body.cylinder(16, 16, 3.2, 7, 22, 'iron');
+  for (let y = 8; y <= 22; y += 2) body.cylinder(16, 16, y % 4 === 0 ? 4.4 : 4, y, y, y % 4 === 0 ? 'copper' : 'copperDark');
+  // three outrigger rods (four at Lv2+)
+  const rods: Array<[number, number]> = level >= 2 ? [[7, 7], [24, 7], [7, 24], [24, 24]] : [[7, 8], [24, 8], [16, 25]];
+  for (const [x, z] of rods) {
+    body.box(x, 5, z, x + 1, 13 + level * 2, z + 1, 'iron');
+    body.box(x, 14 + level * 2, z, x + 1, 14 + level * 2, z + 1, 'copper');
+  }
+  const glow = new VoxelModel(32, 28, 32);
+  for (const [x, z] of rods) glow.box(x, 15 + level * 2, z, x + 1, 16 + level * 2, z + 1, 'volt');
+  if (level >= 3) {
+    // crown of copper prongs around the orb
+    for (let a = 0; a < 8; a++) {
+      const ang = (a / 8) * Math.PI * 2;
+      const x = 16 + Math.cos(ang) * 5.5, z = 16 + Math.sin(ang) * 5.5;
+      body.box(x, 22, z, x, 25, z, 'copper');
+      glow.set(x, 26, z, 'volt');
+    }
+    for (const [x, z] of [[4, 4], [27, 4], [4, 27], [27, 27]] as const) glow.box(x, 5, z, x, 6, z, 'voltDeep');
+  }
+  // head: charged orb at 1.7 world (27.2 vox) — pivot at orb centre
+  const head = new VoxelModel(14, 14, 14);
+  head.sphere(7, 7, 7, level >= 2 ? 3.6 : 3.1, 'volt');
+  head.sphere(7, 7, 7, 1.8, 'white');
+  return {
+    body: body.build(V),
+    glow: glow.build(V, { flags: FLAG_EMISSIVE }),
+    head: head.build(V, { originY: -7 * V, flags: FLAG_EMISSIVE }),
+    headY: 1.7,
+  };
+}
+
+/** Wind (風車塔): tapered timber mill with a sail rotor that turns to face the enemies. */
+function windTower(level: TowerLevel): TowerParts {
+  const body = new VoxelModel(32, 26, 32);
+  stoneBase(body, 3, 4);
+  // tapered timber tower
+  for (let y = 4; y <= 21; y++) {
+    const r = 9 - (y - 4) * 0.28;
+    body.box(16 - r, y, 16 - r, 15 + r, y, 15 + r, y % 5 === 0 ? 'woodDark' : 'plank', true);
+  }
+  // door + window
+  body.box(14, 4, 6, 17, 8, 6, 'woodDark');
+  body.box(15, 13, 8, 16, 14, 8, 'lantern');
+  // roof cap
+  for (let y = 22; y <= 25; y++) {
+    const r = 5.5 - (y - 22) * 1.4;
+    body.box(16 - r, y, 16 - r, 15 + r, y, 15 + r, level >= 3 ? 'clothBlue' : 'cloth');
+  }
+  if (level >= 2) {
+    // stone skirt and a little balcony
+    body.box(6, 5, 6, 25, 6, 25, 'stoneDark', true);
+    body.box(9, 15, 9, 22, 15, 22, 'woodLight');
+  }
+  let cloth: VoxelModel | undefined;
+  if (level >= 3) {
+    cloth = new VoxelModel(32, 26, 32);
+    body.box(16, 25, 16, 16, 25, 16, 'woodDark');
+    cloth.box(17, 21, 16, 20, 23, 16, 'gold');
+  }
+  // head: four-sail rotor in the x/y plane, hub at the pivot (1.5 world) so it spins about z.
+  const n = 27;
+  const c = 13;
+  const head = new VoxelModel(n, n, 6);
+  const sailLen = level >= 2 ? 13 : 11;
+  for (let k = 0; k < 4; k++) {
+    const dx = [1, 0, -1, 0][k]!, dy = [0, 1, 0, -1][k]!;
+    for (let i = 2; i <= sailLen; i++) {
+      const x = c + dx * i, y = c + dy * i;
+      head.set(x, y, 3, 'woodDark');
+      // sail cloth to one side of each spar
+      const sx = -dy, sy = dx;
+      if (i >= 4) for (let w = 1; w <= 3; w++) head.set(x + sx * w, y + sy * w, 3, (i + w) % 3 === 0 ? 'sailShade' : 'sail');
+    }
+  }
+  head.box(c - 1, c - 1, 1, c + 1, c + 1, 5, level >= 3 ? 'gold' : 'iron');
+  const headGeo = head.build(V, { originY: -c * V - V / 2 });
+  headGeo.translate(0, 0, 0.18);
+  return {
+    body: body.build(V),
+    head: headGeo,
+    cloth: cloth?.build(V),
+    headY: 1.5,
+  };
+}
+
 const cache = new Map<string, TowerParts>();
 export function towerParts(kind: TowerKind, level: TowerLevel): TowerParts {
   const key = `${kind}:${level}`;
   let p = cache.get(key);
   if (!p) {
-    p = kind === 'arrow' ? arrowTower(level) : kind === 'frost' ? frostTower(level) : cannonTower(level);
+    p = kind === 'arrow' ? arrowTower(level) : kind === 'frost' ? frostTower(level) : kind === 'cannon' ? cannonTower(level)
+      : kind === 'lightning' ? lightningTower(level) : windTower(level);
     cache.set(key, p);
   }
   return p;
