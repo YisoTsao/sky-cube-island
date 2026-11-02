@@ -15,11 +15,11 @@ export class CameraRig {
   private yawT = 1;
   pitch = MathUtils.degToRad(38);
   /** Snapped zoom levels, widest first. Index 0 is a strategic overview that fits the whole island. */
-  private readonly zoomLevels = [0.55, 0.8, 1.15, 1.65];
+  private readonly zoomLevels = [0.65, 0.85, 1.15, 1.65];
   static readonly INTRO_ZOOM_INDEX = 1;
   static readonly DEFAULT_ZOOM_INDEX = 2;
   /** Widest free (wheel / pinch) zoom. */
-  static readonly MIN_ZOOM = 0.5;
+  static readonly MIN_ZOOM = 0.6;
   zoomIndex = CameraRig.DEFAULT_ZOOM_INDEX;
   private zoom = 1.15;
   private zoomTarget = 1.15;
