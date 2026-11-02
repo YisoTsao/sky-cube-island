@@ -6,6 +6,7 @@ import { ECONOMY, TOWER_DEFS, sellRefund, upgradeCost } from '../domain/definiti
 import { deriveMap, type DerivedMap } from '../navigation/derived-map';
 import { computeRoutes } from '../navigation/connectivity';
 import { buildSpawnQueue } from '../simulation/waves';
+import { logCommand } from '../domain/challenges';
 
 const MESSAGES: Record<RejectionCode, string> = {
   INVALID_PHASE: '目前階段不能進行這個操作',
@@ -87,6 +88,12 @@ function editProtectionCode(map: DerivedMap, cellId: CellId): RejectionCode {
  * untouched original on failure. UNDO_PREPARE is handled by the session layer.
  */
 export function executeCommand(level: LevelDef, state: GameState, cmd: GameCommand): CommandResult {
+  const r = executeRaw(level, state, cmd);
+  if (!r.ok || cmd.type === 'START_WAVE' || cmd.type === 'CONTINUE' || cmd.type === 'SET_TARGETING') return r;
+  return { ...r, state: { ...r.state, run: logCommand(r.state.run, cmd.type, r.state, cmd.type === 'BUILD_TOWER' ? cmd.kind : undefined) } };
+}
+
+function executeRaw(level: LevelDef, state: GameState, cmd: GameCommand): CommandResult {
   if (cmd.type === 'UNDO_PREPARE') return reject(state, state.phase === 'PREPARE' ? 'NOTHING_TO_UNDO' : 'INVALID_PHASE');
   if (cmd.type === 'CONTINUE') return continueAfterResult(level, state);
   if (state.phase !== 'PREPARE' && !(state.phase === 'COMBAT' && COMBAT_COMMANDS.has(cmd.type))) return reject(state, 'INVALID_PHASE');

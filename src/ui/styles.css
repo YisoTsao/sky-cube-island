@@ -588,3 +588,17 @@ b.bad { color: var(--bad); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* per-level challenges (T1) */
+.challenge-list { margin: 10px 0 4px; padding: 8px 10px; border-radius: 10px; background: rgba(255, 255, 255, .55); text-align: left; }
+.challenge-head { font: 900 13px/1.3 var(--font); margin-bottom: 4px; }
+.challenge-head small { font-weight: 700; color: var(--ink-soft); }
+.challenge { display: flex; align-items: center; gap: 6px; font: 700 13px/1.5 var(--font); }
+.challenge-mark { width: 16px; text-align: center; font-weight: 900; }
+.challenge.ok .challenge-mark { color: #2f8f3a; }
+.challenge.fail { opacity: .6; }
+.challenge.fail .challenge-mark { color: var(--bad); }
+.challenge-label { flex: 1; min-width: 0; }
+.challenge-done { color: #c9932f; }
+.challenge-note { font: 700 11px/1.3 var(--font); color: var(--ink-soft); margin-top: 4px; }
+.level-card-challenges, .level-card-best { margin-left: 6px; font: 800 11px/1 var(--font); padding: 3px 6px; border-radius: 7px; background: rgba(0, 0, 0, .08); vertical-align: middle; }

@@ -10,6 +10,7 @@ import { saveSettings, type SettingsV1 } from '../settings/settings';
 import { audio } from '../audio/audio';
 import { issue, setTool, startWave } from './GameView';
 import { launchLevel } from './launch';
+import { challengeMet, challengesFor } from '../domain/challenges';
 import { getLevel, nextLevelId } from '../levels/registry';
 import {
   CoinIcon, EnemyIcon, GearIcon, HeartIcon, LowerIcon, PauseIcon, PlayIcon, RaiseIcon, RotateIcon, StarIcon, TowerIcon, UndoIcon, WallIcon,
@@ -496,6 +497,7 @@ function Victory() {
   const phase = useUi((s) => s.phase);
   const stars = useUi((s) => s.stars);
   const hp = useUi((s) => s.coreHp);
+  const record = useUi((s) => s.progress.records?.[level.id]);
   if (phase !== 'VICTORY') return null;
   const next = nextLevelId(level.id);
   return (
@@ -505,7 +507,8 @@ function Victory() {
         <div className="stars">
           {[1, 2, 3].map((i) => <span key={i} className={`star s${i}`} style={{ animationDelay: `${0.3 + i * 0.25}s` }}><StarIcon filled={stars >= i} size={64} /></span>)}
         </div>
-        <div className="victory-sub">守護之心剩餘 {hp} 生命</div>
+        <div className="victory-sub">守護之心剩餘 {hp} 生命{record && record.clears > 1 && record.bestHp > hp ? `（最佳 ${record.bestHp}）` : record && record.clears > 1 && hp >= record.bestHp ? '・新紀錄！' : ''}</div>
+        <ChallengeList final />
         <TowerStatsTable />
         <div className="modal-actions">
           {next && <button className="btn primary big" onClick={() => void launchLevel(next, false)}>下一關：{getLevel(next).name}</button>}
@@ -513,6 +516,33 @@ function Victory() {
           <button className="btn ghost" onClick={() => useUi.getState().set({ screen: 'title' })}>回到標題</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ challenges */
+/** Optional per-level challenges: live status in the menu, final result on victory. */
+function ChallengeList({ final = false }: { final?: boolean }) {
+  useUi((s) => s.gold); // refresh as the run changes
+  useUi((s) => s.coreHp);
+  const record = useUi((s) => s.progress.records?.[level.id]);
+  const list = challengesFor(level);
+  if (!list.length) return null;
+  return (
+    <div className="challenge-list">
+      <div className="challenge-head">挑戰{record ? <small> · 已完成 {record.challenges.filter((id) => list.some((c) => c.id === id)).length}/{list.length}</small> : null}</div>
+      {list.map((c) => {
+        const ok = challengeMet(c, controller.state);
+        const done = record?.challenges.includes(c.id);
+        return (
+          <div key={c.id} className={`challenge ${ok ? 'ok' : 'fail'}`}>
+            <span className="challenge-mark" aria-hidden>{ok ? (final ? '✓' : '●') : '✕'}</span>
+            <span className="challenge-label">{c.label}</span>
+            {done && <span className="challenge-done" title="以前完成過">★</span>}
+          </div>
+        );
+      })}
+      {!final && <div className="challenge-note">● 進行中 ✕ 這局已失敗；通關時判定</div>}
     </div>
   );
 }
@@ -533,6 +563,7 @@ function PauseMenu() {
           <button className="btn" onClick={() => useUi.getState().set({ helpOpen: true })}>操作說明</button>
           <button className="btn ghost" onClick={() => { close(); useUi.getState().set({ screen: 'title' }); }}>回到標題（自動存檔）</button>
         </div>
+        <ChallengeList />
       </div>
     </div>
   );

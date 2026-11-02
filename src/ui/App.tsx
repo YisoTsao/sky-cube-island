@@ -7,6 +7,7 @@ import { HelpPanel, Hud, SettingsPanel } from './Hud';
 import { HeartIcon, StarIcon } from './icons';
 import { LEVEL_IDS, getLevel, isLevelId, type LevelId } from '../levels/registry';
 import { isUnlocked } from '../persistence/progress';
+import { challengesFor } from '../domain/challenges';
 import { readSave } from '../persistence/save';
 import { launchLevel } from './launch';
 
@@ -19,6 +20,9 @@ function LevelCard({ id, selected, onPick }: { id: LevelId; selected: boolean; o
   const open = isUnlocked(id, progress);
   const best = progress.best[id] ?? 0;
   const kinds = new Set(l.waves.flatMap((w) => w.entries.map((e) => e.enemyKind)));
+  const challenges = challengesFor(l);
+  const rec = progress.records?.[id];
+  const done = challenges.filter((c) => rec?.challenges.includes(c.id)).length;
   return (
     <button
       className={`level-card ${selected ? 'selected' : ''} ${open ? '' : 'locked'} theme-${l.theme ?? 'day'}`}
@@ -28,7 +32,11 @@ function LevelCard({ id, selected, onPick }: { id: LevelId; selected: boolean; o
       <span className="level-card-name">{l.name}</span>
       <span className="level-card-sub">{open ? l.subtitle : `通關 ${getLevel(LEVEL_IDS[LEVEL_IDS.indexOf(id) - 1]!).name} 後解鎖`}</span>
       <span className="level-card-meta">{l.waves.length} 波 · {l.portals.length} 個入口 · {kinds.size} 種怪物</span>
-      <span className="level-card-stars">{[1, 2, 3].map((i) => <StarIcon key={i} filled={best >= i} size={18} />)}</span>
+      <span className="level-card-stars">
+        {[1, 2, 3].map((i) => <StarIcon key={i} filled={best >= i} size={18} />)}
+        {open && challenges.length > 0 && <span className="level-card-challenges" title={challenges.map((c) => `${rec?.challenges.includes(c.id) ? '✓' : '・'} ${c.label}`).join('\n')}>挑戰 {done}/{challenges.length}</span>}
+        {rec && rec.bestHp > 0 && <span className="level-card-best">最佳 {rec.bestHp}♥</span>}
+      </span>
       {!open && <span className="level-card-lock" aria-hidden>🔒</span>}
     </button>
   );

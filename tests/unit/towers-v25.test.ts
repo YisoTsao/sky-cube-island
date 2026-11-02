@@ -117,3 +117,47 @@ describe('Targeting modes', () => {
     expect(executeCommand(level, s, { type: 'SET_TARGETING', towerId: 'nope', targeting: 'LAST' }).ok).toBe(false);
   });
 });
+
+import { challengeMet, challengesFor, emptyRunLog } from '../../src/domain/challenges';
+import { recordVictory } from '../../src/persistence/progress';
+import { createSession, dispatch } from '../../src/session/undo-history';
+
+describe('Per-level challenges (T1)', () => {
+  it('every level has three challenges with unique ids', () => {
+    const list = challengesFor(level);
+    expect(list).toHaveLength(3);
+    expect(new Set(list.map((c) => c.id)).size).toBe(3);
+  });
+  it('commands fill the run log; undo reverts it; saves keep it', () => {
+    const session = createSession();
+    let s = fresh();
+    s = dispatch(level, session, s, { type: 'BUILD_TOWER', kind: 'arrow', anchorCellId: cid(23, 15) }).state;
+    expect(s.run?.kindsBuilt).toEqual(['arrow']);
+    expect(s.run?.maxTowers).toBe(1);
+    const wallCell = level.cells.find((c) => c.editable && executeCommand(level, s, { type: 'PLACE_WALL', cellId: c.id }).ok)!;
+    s = dispatch(level, session, s, { type: 'PLACE_WALL', cellId: wallCell.id }).state;
+    expect(s.run?.wallsPlaced).toBe(1);
+    const noWalls = challengesFor(level).find((c) => c.rule.kind === 'noWalls')!;
+    expect(challengeMet(noWalls, s)).toBe(false);
+    s = dispatch(level, session, s, { type: 'UNDO_PREPARE' }).state;
+    expect(s.run?.wallsPlaced).toBe(0);
+    expect(challengeMet(noWalls, s)).toBe(true);
+    expect(GameStateSchema.safeParse(s).success).toBe(true);
+  });
+  it('rules read the run log and core HP', () => {
+    const base = { coreHp: 20, run: { ...emptyRunLog(), maxTowers: 9, kindsBuilt: ['arrow' as const, 'wind' as const] } };
+    const ch = (rule: Parameters<typeof challengeMet>[0]['rule']) => challengeMet({ id: 'x', label: '', rule }, base);
+    expect(ch({ kind: 'coreAtLeast', hp: 20 })).toBe(true);
+    expect(ch({ kind: 'coreAtLeast', hp: 21 })).toBe(false);
+    expect(ch({ kind: 'maxTowers', count: 8 })).toBe(false);
+    expect(ch({ kind: 'onlyKinds', kinds: ['arrow', 'frost', 'cannon'] })).toBe(false);
+    expect(ch({ kind: 'onlyKinds', kinds: ['arrow', 'wind'] })).toBe(true);
+    expect(challengeMet({ id: 'y', label: '', rule: { kind: 'noSell' } }, { coreHp: 1 })).toBe(true);
+  });
+  it('records keep the best HP and the union of completed challenges', () => {
+    let p = recordVictory('L1-01', 2, { schemaVersion: 1, best: {} }, { coreHp: 12, challenges: ['L1-01#2'] });
+    p = recordVictory('L1-01', 1, p, { coreHp: 5, challenges: ['L1-01#3'] });
+    expect(p.best['L1-01']).toBe(2);
+    expect(p.records?.['L1-01']).toEqual({ bestHp: 12, clears: 2, challenges: ['L1-01#2', 'L1-01#3'] });
+  });
+});

@@ -2,6 +2,7 @@ import type { EnemyKind, GameEvent, GameState, LevelDef } from '../domain/types'
 import { getLevel, isLevelId, type LevelId } from '../levels/registry';
 import { validateLevel } from '../levels/level-validator';
 import { recordVictory } from '../persistence/progress';
+import { challengeMet, challengesFor } from '../domain/challenges';
 import { GameController, type EventListener } from '../state/game-controller';
 import { useUi } from '../state/store';
 import { audio } from '../audio/audio';
@@ -117,7 +118,8 @@ function onEvents(events: GameEvent[], ctx: Parameters<EventListener>[1]) {
       if (e.to === 'PREPARE') ui.set({ failureText: null });
     }
     if (e.type === 'VICTORY') {
-      ui.set({ stars: e.stars, lastWaveStats: controller.waveStats, progress: recordVictory(level.id, e.stars) });
+      const met = challengesFor(level).filter((c) => challengeMet(c, ctx.state)).map((c) => c.id);
+      ui.set({ stars: e.stars, lastWaveStats: controller.waveStats, progress: recordVictory(level.id, e.stars, undefined, { coreHp: ctx.state.coreHp, challenges: met }) });
     }
     if (e.type === 'WAVE_STARTED') {
       const step = useUi.getState().tutorialStep;

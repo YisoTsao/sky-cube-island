@@ -53,6 +53,10 @@ https://yisotsao.github.io/sky-cube-island/ （手機瀏覽器可直接開啟）
 
 手機預設畫質為「中」（低記憶體或 ≤4 核時為「低」），可在設定中調整。直式與橫式皆可遊玩，橫式視野較大。
 
+## 挑戰與紀錄
+
+每關有 3 個可選挑戰（例如「不放任何木牆通關」「同時最多只有 8 座塔」）。選單（⚙／Esc）顯示這局是否仍在達成中，通關時結算；標題畫面的關卡卡片顯示已完成的挑戰數與最佳剩餘生命（存在本機）。
+
 ## 架構
 
 - `src/domain`、`src/levels`、`src/navigation`、`src/commands`、`src/simulation`、`src/session`：純 TypeScript 模擬核心（20 TPS、確定性），不依賴 three 或 React，ESLint 強制。
