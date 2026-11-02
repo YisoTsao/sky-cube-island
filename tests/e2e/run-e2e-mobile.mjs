@@ -34,7 +34,21 @@ async function run(browser, name, device) {
   const vp = page.viewportSize();
 
   await page.goto(`http://localhost:${PORT}/`);
-  await page.getByText('開始遊戲').tap();
+  // Title screen: every button must be on screen and hit-testable without scrolling. Tap by raw
+  // coordinates (not locator.tap, which auto-scrolls and hid a regression where the level cards
+  // pushed 開始遊戲 below the fold on phones).
+  await wait(700); // let the title pop-in animation settle
+  const titleBtns = await page.evaluate(() => [...document.querySelectorAll('.title-buttons .btn, .level-card')].map((b) => {
+    const r = b.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const hit = cx >= 0 && cy >= 0 && cx <= innerWidth && cy <= innerHeight && b.contains(document.elementFromPoint(cx, cy));
+    return { text: b.textContent.trim().slice(0, 8), hit, bottom: r.bottom, x: cx, y: cy };
+  }));
+  const unreachable = titleBtns.filter((b) => !b.hit || b.bottom > vp.height);
+  if (unreachable.length) fail(`${name}: title buttons off-screen or covered: ${unreachable.map((b) => b.text).join(', ')}`);
+  const startBtn = titleBtns.find((b) => b.text.startsWith('開始遊戲'));
+  if (!startBtn) throw new Error(`${name}: no start button`);
+  await page.touchscreen.tap(startBtn.x, startBtn.y);
   await page.waitForFunction(() => !!window.__sky, null, { timeout: 15000 });
   await page.tap('canvas', { position: { x: vp.width / 2, y: vp.height / 2 } }); // skip intro
   await wait(800);
