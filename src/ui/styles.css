@@ -49,6 +49,9 @@ kbd {
 /* ------------------------------------------------------------------ game view */
 .game-view { position: fixed; inset: 0; }
 .game-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; outline: none; }
+/* no browser pinch/double-tap zoom anywhere over the game; panels that scroll still scroll */
+.game-view, .hud, .hud * { touch-action: none; }
+.hud .selection-panel, .hud .selection-panel *, .hud .modal, .hud .modal * { touch-action: pan-y; }
 .portal-cards { position: absolute; inset: 0; pointer-events: none; }
 .portal-card {
   position: absolute; left: 0; top: 0; min-width: 104px; padding: 6px 10px 8px;
@@ -391,128 +394,168 @@ b.bad { color: var(--bad); }
 .hud.touch .btn:hover:not(:disabled) { transform: none; }
 @media (pointer: coarse) { .title-screen kbd { display: none; } }
 
-/* ------------------------------------------------------------------ phone portrait */
-@media (max-width: 640px) {
+/* ------------------------------------------------------------------ phone dock (shared)
+   On phones the toolbar becomes a dock that shows one category at a time (防禦塔 / 地形),
+   so five towers get a full-width row of equal, readable buttons instead of nine cramped ones. */
+.dock-tabs { display: none; }
+.tool-label { flex: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; line-height: 1.35; padding: 0 2px; }
+.tool-cost { flex: none; }
+.tool-icon { min-height: 0; }
+.portal-card-total { display: none; }
+
+@media (orientation: portrait) and (max-width: 640px), (orientation: landscape) and (max-height: 520px) {
+  .dock-tabs { display: flex; gap: 6px; align-items: center; }
+  .dock-tab {
+    display: inline-flex; align-items: center; justify-content: center; gap: 4px; height: 34px; padding: 0 14px;
+    border-radius: 17px; border: 2px solid var(--wood-2); background: linear-gradient(180deg, var(--parch-1), var(--parch-2));
+    color: var(--wood-1); font: 900 13px/1 var(--font); box-shadow: 0 3px 0 rgba(62, 38, 21, .4);
+  }
+  .dock-tab svg { width: 18px; height: 18px; flex: none; }
+  .dock-tab.on { border-color: var(--crystal-deep); background: linear-gradient(180deg, #e6fbff, #bfeeff); color: #135a85; box-shadow: 0 3px 0 #1a6fa0; }
+  .dock-tab:disabled { opacity: .5; }
+  .dock-undo { margin-left: auto; display: flex; }
+  .dock-undo .tool-btn {
+    flex-direction: row; gap: 4px; width: auto; height: 34px; padding: 0 12px; border-radius: 17px; justify-content: center;
+  }
+  .dock-undo .tool-icon svg { width: 18px; height: 18px; }
+  .dock-undo .tool-label { font-size: 12px; }
+  .hud-toolbar .toolbar-group.small { display: none; }
+  .hud-toolbar.cat-towers .toolbar-group.terrain, .hud-toolbar.cat-terrain .toolbar-group.towers { display: none; }
+  .hud-toolbar { transform: none; }
+  .hud.intro .hud-toolbar { transform: translateY(20px); }
+  .toolbar-group { border-width: 2px; }
+  .tool-btn { padding: 3px 2px 4px; border-radius: 10px; }
+  .tool-btn.active { transform: translateY(-3px); }
+  .tool-label { font-size: 11px; }
+  .tool-cost { font-size: 11px; }
+  .tool-cost svg { width: 11px; height: 11px; }
+  .toasts { width: calc(100vw - 32px); }
+  .toast { font-size: 13px; text-align: center; }
+  .portal-card { min-width: 76px; padding: 3px 6px 5px; font-size: 10px; }
+  .portal-card svg { width: 14px; height: 14px; }
+  .portal-card-title { margin-bottom: 1px; }
+  .portal-card-row { display: none; }
+  .portal-card-total { display: block; font-weight: 900; color: var(--ink); }
+  .portal-card { min-width: 0; padding: 3px 9px 4px; }
   .hud { font-size: calc(13px * var(--ui-scale, 1)); }
+  .hud-gold { min-width: 0; padding: 5px 12px 5px 8px; gap: 6px; }
+  .hud-gold svg { width: 22px; height: 22px; }
+  .hud-gold-num { font-size: 20px; }
+  .hud-heart svg { width: 22px; height: 22px; }
+  .hud-hp { font-size: 16px; }
+  .swp-title { font-size: 11px; }
+  .swp-enemies { gap: 0 7px; max-width: none; font-size: 12px; }
+  .swp-enemies svg { width: 16px; height: 16px; }
+  .btn.start { white-space: nowrap; }
+  .tutorial-step { width: 26px; height: 26px; font-size: 10px; }
+}
+
+/* ------------------------------------------------------------------ phone portrait */
+@media (orientation: portrait) and (max-width: 640px) {
+  .hud { --dock-h: calc(136px + var(--sab)); }
+  /* top: compact status on the left, gold + a slim column of camera buttons on the right */
   .hud-topleft { left: calc(8px + var(--sal)); top: calc(8px + var(--sat)); min-width: 0; padding: 6px 10px 8px; }
   .hud-level { display: none; }
   .hud-row { gap: 10px; }
   .hud-wave-num { font-size: 20px; }
   .hud-heart { padding-left: 10px; gap: 6px; }
-  .hud-heart svg { width: 22px; height: 22px; }
-  .hud-hp { font-size: 16px; }
   .hp-bar { width: 64px; }
   .hud-topright { right: calc(8px + var(--sar)); top: calc(8px + var(--sat)); flex-direction: column; align-items: flex-end; gap: 6px; }
-  .hud-gold { min-width: 0; padding: 5px 12px 5px 8px; gap: 6px; }
-  .hud-gold svg { width: 22px; height: 22px; }
-  .hud-gold-num { font-size: 20px; }
   .hud-gold-delta { right: auto; left: -8px; bottom: auto; top: 50%; transform: translate(-100%, -50%); }
+  .hud-cam, .hud-speed { flex-direction: column; padding: 3px; border-radius: 22px; }
   .icon-btn { width: 40px; height: 40px; }
 
-  .hud-toolbar { left: calc(6px + var(--sal)); right: calc(6px + var(--sar)); bottom: calc(6px + var(--sab)); transform: none; gap: 4px; align-items: stretch; }
-  .hud.intro .hud-toolbar { transform: translateY(20px); }
-  .toolbar-group { gap: 3px; padding: 4px; min-width: 0; border-width: 2px; }
-  .toolbar-group.towers { flex: 5 1 0; }
-  .toolbar-group.terrain { flex: 3 1 0; }
-  .toolbar-group.small { flex: 1 1 0; min-width: 52px; }
+  /* bottom dock: category tabs + one full-width row */
+  .hud-toolbar {
+    left: calc(8px + var(--sal)); right: calc(8px + var(--sar)); bottom: calc(8px + var(--sab));
+    flex-direction: column; align-items: stretch; gap: 6px;
+  }
+  .toolbar-group { gap: 5px; padding: 5px; min-width: 0; }
   .toolbar-group.towers > div { flex: 1 1 0; min-width: 0; display: flex; }
-  .tool-btn, .toolbar-group.small .tool-btn { flex: 1 1 0; width: auto; min-width: 0; height: 64px; padding: 3px 1px 4px; border-radius: 9px; }
-  .tool-btn.active { transform: translateY(-3px); }
-  .tool-key { display: none; }
-  .tool-icon svg { width: 30px; height: 30px; }
-  .tool-label { font-size: 10px; }
-  .tool-cost { font-size: 10px; }
-  .tool-cost svg { width: 10px; height: 10px; }
+  .tool-btn { flex: 1 1 0; width: auto; min-width: 0; height: 74px; }
+  .tool-icon svg { width: 34px; height: 34px; }
 
-  /* full-width strip above the toolbar: the preview wraps onto extra rows instead of
-     squeezing the start button when a wave brings many enemy kinds */
   .start-wave {
-    left: calc(8px + var(--sal)); right: calc(8px + var(--sar)); bottom: calc(84px + var(--sab));
+    left: calc(8px + var(--sal)); right: calc(8px + var(--sar)); bottom: calc(var(--dock-h) + 4px);
     flex-direction: row; align-items: stretch; gap: 6px;
   }
   .start-wave-preview { flex: 1 1 auto; min-width: 0; padding: 4px 8px 5px; display: flex; flex-direction: column; justify-content: center; }
-  .swp-title { font-size: 11px; }
-  .swp-enemies { gap: 0 7px; max-width: none; font-size: 12px; }
-  .swp-enemies svg { width: 16px; height: 16px; }
-  .btn.start { flex: 0 0 auto; padding: 8px 14px; font-size: 15px; white-space: nowrap; }
-  /* a selected tower's sheet takes the space; the per-portal cards still show the wave */
-  .hud:has(.selection-panel) .start-wave-preview { display: none; }
-  .hud:has(.selection-panel) .start-wave { left: auto; }
+  .btn.start { flex: 0 0 auto; padding: 8px 14px; font-size: 15px; }
 
+  /* the selected tower / cell is a bottom sheet above the dock; it replaces the start strip */
   .selection-panel, .selection-panel.compact {
-    left: calc(8px + var(--sal)); right: calc(8px + var(--sar)); width: auto; bottom: calc(84px + var(--sab));
-    padding: 10px 12px; max-height: calc(100dvh - 220px); overflow-y: auto;
+    left: calc(8px + var(--sal)); right: calc(8px + var(--sar)); width: auto; bottom: calc(var(--dock-h) + 4px);
+    padding: 10px 12px; max-height: calc(100dvh - var(--dock-h) - 90px - var(--sat)); overflow-y: auto;
   }
-  .hud:has(.start-wave) .selection-panel { bottom: calc(142px + var(--sab)); }
-  .hover-chip { bottom: calc(142px + var(--sab)); max-width: calc(100vw - 16px); white-space: normal; text-align: center; font-size: 12px; }
+  .hud:has(.selection-panel) .start-wave { display: none; }
+  /* a tower's sheet slides over the dock (standard bottom-sheet pattern) so more of the map stays
+     visible; closing it brings the dock back */
+  .selection-panel:not(.compact) { bottom: calc(8px + var(--sab)); max-height: calc(100dvh - 100px - var(--sat) - var(--sab)); z-index: 2; }
+  .hud:has(.selection-panel:not(.compact)) .hud-toolbar { visibility: hidden; }
+  .hover-chip { bottom: calc(var(--dock-h) + 72px); max-width: calc(100vw - 16px); white-space: normal; text-align: center; font-size: 12px; }
 
   .tutorial {
-    display: flex; left: calc(8px + var(--sal)); right: calc(8px + var(--sar)); top: calc(122px + var(--sat)); transform: none;
+    display: flex; left: calc(8px + var(--sal)); right: calc(60px + var(--sar)); top: calc(78px + var(--sat)); transform: none;
     max-width: none; min-width: 0; padding: 7px 10px; font-size: 12px; animation: none;
   }
-  .tutorial-step { width: 26px; height: 26px; font-size: 10px; }
-  .toasts { top: 38%; width: calc(100vw - 32px); }
-  .toast { font-size: 13px; text-align: center; }
-  .portal-card { min-width: 76px; padding: 3px 6px 5px; font-size: 10px; }
-  .portal-card svg { width: 14px; height: 14px; }
-  .portal-card-title { margin-bottom: 1px; }
-  .portal-card-row { max-width: 150px; gap: 0 5px; }
+  .toasts { top: 38%; }
   .paused-banner { font-size: 18px; }
 }
 
+/* narrow portrait phones (≤ 360 px): slimmer status bar so it clears the gold counter */
+@media (orientation: portrait) and (max-width: 360px) {
+  .hud-row { gap: 8px; }
+  .hud-heart { padding-left: 8px; }
+  .wave-pips { gap: 2px; }
+  .wave-pips i { width: 8px; }
+  .hp-bar { width: 44px; }
+  .dock-tab { padding: 0 10px; }
+  .toolbar-group { gap: 4px; padding: 4px; }
+  .tool-label { font-size: 10px; padding: 0; letter-spacing: -.02em; }
+}
+
 /* ------------------------------------------------------------------ phone landscape (short viewports) */
-@media (max-height: 520px) {
-  .hud { font-size: calc(13px * var(--ui-scale, 1)); }
+@media (orientation: landscape) and (max-height: 520px) {
   .hud-topleft { left: calc(8px + var(--sal)); top: calc(6px + var(--sat)); min-width: 0; padding: 5px 10px 7px; }
   .hud-level { margin-bottom: 2px; }
   .hud-level-name { font-size: 13px; }
   .hud-wave-num { font-size: 18px; }
-  .hud-hp { font-size: 16px; }
   .hp-bar { width: 72px; }
-  .hud-heart svg { width: 22px; height: 22px; }
   .hud-topright { right: calc(8px + var(--sar)); top: calc(6px + var(--sat)); gap: 6px; }
-  .hud-gold { min-width: 0; padding: 5px 12px 5px 8px; }
-  .hud-gold svg { width: 22px; height: 22px; }
-  .hud-gold-num { font-size: 20px; }
   .icon-btn { width: 38px; height: 38px; }
 
-  .hud-toolbar { left: calc(8px + var(--sal)); right: auto; bottom: calc(6px + var(--sab)); transform: none; gap: 6px; }
-  .toolbar-group, .toolbar-group.towers, .toolbar-group.terrain, .toolbar-group.small { flex: 0 0 auto; min-width: 0; }
-  .toolbar-group.towers > div { flex: 0 0 auto; }
-  .hud.intro .hud-toolbar { transform: translateY(20px); }
-  .toolbar-group { gap: 4px; padding: 4px; border-width: 2px; }
-  .tool-btn, .toolbar-group.small .tool-btn { flex: 0 0 auto; width: 52px; height: 58px; padding: 3px 2px 4px; }
-  .tool-icon svg { width: 28px; height: 28px; }
-  .tool-label { font-size: 10px; }
-  .tool-cost { font-size: 10px; }
+  /* dock: tabs stacked on the left of a single row of tools */
+  .hud-toolbar { left: calc(8px + var(--sal)); right: auto; bottom: calc(6px + var(--sab)); flex-direction: row; align-items: stretch; gap: 6px; }
+  .hud-toolbar > .panel { align-self: flex-end; }
+  .dock-tabs { flex-direction: column; justify-content: space-between; gap: 6px; align-self: stretch; padding: 2px 0 4px; }
+  .dock-tab { width: 80px; flex: 1 1 0; height: auto; min-height: 34px; padding: 0 6px; font-size: 12px; }
+  .dock-undo { display: none; }
+  .hud-toolbar .toolbar-group.small { display: flex; }
+  .toolbar-group.small .tool-btn { width: 52px; }
+  .toolbar-group, .toolbar-group.towers, .toolbar-group.terrain { flex: 0 0 auto; gap: 4px; padding: 4px; }
+  .toolbar-group.towers > div { flex: 0 0 auto; display: flex; }
+  .tool-btn { flex: 0 0 auto; width: 58px; height: 66px; }
+  .tool-icon svg { width: 26px; height: 26px; }
   .tower-tip { width: 230px; font-size: 12px; }
 
-  /* right-hand column beside the toolbar; the preview wraps inside the button's width */
+  /* right-hand column beside the dock; the preview wraps inside the button's width */
   .start-wave { left: auto; right: calc(8px + var(--sar)); bottom: calc(6px + var(--sab)); width: 196px; flex-direction: column; align-items: stretch; gap: 5px; }
   .start-wave-preview { padding: 4px 8px 5px; }
-  .swp-title { font-size: 11px; }
-  .swp-enemies { gap: 0 7px; max-width: none; font-size: 12px; }
-  .swp-enemies svg { width: 16px; height: 16px; }
-  .btn.start { padding: 9px 10px; font-size: 15px; white-space: nowrap; }
+  .btn.start { padding: 9px 10px; font-size: 15px; }
   .hud:has(.selection-panel) .start-wave-preview { display: none; }
 
   .selection-panel, .selection-panel.compact {
-    left: auto; right: calc(8px + var(--sar)); top: calc(60px + var(--sat)); bottom: auto; width: 250px; padding: 8px 10px;
-    max-height: calc(100dvh - 180px); overflow-y: auto;
+    left: auto; right: calc(8px + var(--sar)); top: calc(56px + var(--sat)); bottom: auto; width: 250px; padding: 8px 10px;
+    max-height: calc(100dvh - 120px - var(--sat) - var(--sab)); overflow-y: auto;
   }
   .sel-stats { margin: 6px 0 4px; }
   .sel-actions { margin-top: 6px; }
-  .hover-chip { bottom: calc(80px + var(--sab)); font-size: 12px; }
+  .hover-chip { bottom: auto; top: calc(60px + var(--sat)); font-size: 12px; }
   .tutorial {
-    display: flex; left: calc(8px + var(--sal)); right: auto; top: calc(104px + var(--sat)); transform: none; max-width: 300px; min-width: 0;
+    display: flex; left: calc(8px + var(--sal)); right: auto; top: calc(78px + var(--sat)); transform: none; max-width: 300px; min-width: 0;
     padding: 6px 10px; font-size: 12px; animation: none;
   }
-  .tutorial-step { width: 26px; height: 26px; font-size: 10px; }
   .toasts { top: 30%; }
-  .portal-card { min-width: 76px; padding: 3px 6px 5px; font-size: 10px; }
-  .portal-card svg { width: 14px; height: 14px; }
-  .portal-card-title { margin-bottom: 1px; }
-  .portal-card-row { max-width: 170px; gap: 0 5px; }
 
   .title-gem { display: none; }
   .title-card { padding: 12px 20px; }
@@ -527,20 +570,21 @@ b.bad { color: var(--bad); }
   .level-card-name { font-size: 16px; }
   .level-card-meta, .level-card-stars { display: none; }
 }
+/* tall-enough landscape: the tools get a normal height */
+@media (orientation: landscape) and (max-height: 520px) and (min-height: 380px) { .tool-btn { height: 72px; } }
+@media (orientation: landscape) and (max-height: 379px) { .tool-btn { height: 66px; } }
 
-/* narrow landscape phones (e.g. 568–760 px wide): no room beside the toolbar, so the start
-   column sits above its right end instead */
-@media (max-height: 520px) and (max-width: 760px) {
-  .start-wave { bottom: calc(80px + var(--sab)); }
-  .hud:has(.start-wave) .selection-panel { max-height: calc(100dvh - 200px); }
+/* narrow landscape phones (568–760 px wide): no room beside the dock, so the start column sits
+   above its right end instead */
+@media (orientation: landscape) and (max-height: 520px) and (max-width: 760px) {
+  .start-wave { bottom: calc(90px + var(--sab)); width: 180px; }
+  .hud:has(.selection-panel) .start-wave { display: none; }
 }
-/* very short landscape (iPhone SE 1st gen, 320 px tall): tuck the tutorial right under the top HUD
-   so it doesn't cover the middle of the island */
-@media (max-height: 360px) {
+/* very short landscape (320 px tall): tuck the tutorial right under the top HUD */
+@media (orientation: landscape) and (max-height: 360px) {
   .tutorial { top: calc(62px + var(--sat)); max-width: 270px; padding: 4px 8px; font-size: 11px; gap: 6px; }
   .tutorial-step { width: 22px; height: 22px; }
 }
-
 /* ------------------------------------------------------------------ small screens: modals scroll, ribbon tucks inside */
 @media (max-width: 640px), (max-height: 600px) {
   .modal-wrap { padding: calc(10px + var(--sat)) calc(10px + var(--sar)) calc(10px + var(--sab)) calc(10px + var(--sal)); }

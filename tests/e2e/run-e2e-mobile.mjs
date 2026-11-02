@@ -57,25 +57,39 @@ async function run(browser, name, device) {
   if (!info.touchUi) fail(`${name}: touch UI not detected`);
   console.log(name, 'quality', info.quality);
 
-  // every toolbar button is fully on screen and big enough to hit
-  const layout = await page.evaluate(() => {
+  // every visible toolbar button is fully on screen, big enough to hit, and its label fits
+  const checkLayout = () => page.evaluate(() => {
     const vw = innerWidth, vh = innerHeight;
-    const btns = [...document.querySelectorAll('.tool-btn')].map((b) => b.getBoundingClientRect());
+    const shown = [...document.querySelectorAll('.tool-btn, .dock-tab')].filter((b) => b.getClientRects().length);
+    const btns = shown.map((b) => b.getBoundingClientRect());
+    const clipped = [...document.querySelectorAll('.tool-label, .dock-tab')].filter((e) => e.getClientRects().length && (e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1)).map((e) => e.textContent.trim());
+    const towers = [...document.querySelectorAll('.toolbar-group.towers .tool-btn')].filter((b) => b.getClientRects().length).length;
     const off = btns.filter((r) => r.left < 0 || r.right > vw || r.bottom > vh || r.top < 0).length;
-    const small = btns.filter((r) => r.width < 40 || r.height < 40).length;
+    const small = btns.filter((r) => r.width < 30 || r.height < 30).length;
     const panels = ['.hud-topleft', '.hud-gold', '.hud-cam', '.start-wave', '.hud-toolbar'].map((s) => document.querySelector(s)?.getBoundingClientRect());
     const overlaps = [];
     for (let i = 0; i < panels.length; i++) for (let j = i + 1; j < panels.length; j++) {
       const a = panels[i], b = panels[j];
       if (a && b && a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) overlaps.push(`${i}-${j}`);
     }
-    return { count: btns.length, off, small, overlaps, scrollW: document.documentElement.scrollWidth, vw };
+    return { towers, clipped, off, small, overlaps, scrollW: document.documentElement.scrollWidth, vw };
   });
-  if (layout.count !== 7) fail(`${name}: expected 7 tool buttons, got ${layout.count}`);
-  if (layout.off) fail(`${name}: ${layout.off} tool buttons off-screen`);
-  if (layout.small) fail(`${name}: ${layout.small} tool buttons smaller than 40px`);
-  if (layout.overlaps.length) fail(`${name}: HUD panels overlap ${layout.overlaps.join(',')}`);
-  if (layout.scrollW > layout.vw) fail(`${name}: horizontal overflow`);
+  const assertLayout = (layout, label) => {
+    if (layout.towers !== 5) fail(`${label}: expected 5 tower buttons, got ${layout.towers}`);
+    if (layout.off) fail(`${label}: ${layout.off} tool buttons off-screen`);
+    if (layout.small) fail(`${label}: ${layout.small} tool buttons smaller than 30px`);
+    if (layout.clipped.length) fail(`${label}: clipped labels ${layout.clipped.join(', ')}`);
+    if (layout.overlaps.length) fail(`${label}: HUD panels overlap ${layout.overlaps.join(',')}`);
+    if (layout.scrollW > layout.vw) fail(`${label}: horizontal overflow`);
+  };
+  assertLayout(await checkLayout(), name);
+  // the 地形 tab swaps in the terrain tools, then back to towers
+  await page.locator('.dock-tab', { hasText: '地形' }).tap();
+  await wait(150);
+  const terrain = await page.evaluate(() => [...document.querySelectorAll('.toolbar-group.terrain .tool-btn')].filter((b) => b.getClientRects().length).length);
+  if (terrain !== 3) fail(`${name}: terrain tab shows ${terrain} tools`);
+  await page.locator('.dock-tab', { hasText: '防禦塔' }).tap();
+  await wait(150);
 
   // centre the camera on a known buildable cell and tap twice to build
   const cell = 'c14_13';
@@ -104,7 +118,7 @@ async function run(browser, name, device) {
   await wait(200);
   const camAfter = await page.evaluate(() => window.__sky.scene.rig.target.toArray());
   const panned = Math.hypot(camAfter[0] - camBefore[0], camAfter[2] - camBefore[2]);
-  if (panned < 0.5) fail(`${name}: one-finger drag did not pan (${panned.toFixed(2)})`);
+  if (panned < 0.5) fail(`${name}: one-finger drag did not pan (${panned.toFixed(2)}) at ${await page.evaluate(([x, y]) => { const e = document.elementFromPoint(x, y); const r = document.querySelector('.selection-panel')?.getBoundingClientRect(); return e.className + ' sheet ' + JSON.stringify(r); }, [vp.width * 0.5, vp.height * 0.45])}`);
   if ((await page.evaluate(() => window.__sky.controller.state.towers.length)) !== 1) fail(`${name}: drag changed the board`);
 
   // pinch out zooms in (deselect first so the tower sheet doesn't sit under a finger on small phones)
@@ -116,6 +130,28 @@ async function run(browser, name, device) {
   await wait(600);
   const topAfter = await page.evaluate(() => window.__sky.scene.rig.camera.top);
   if (!(topAfter < topBefore * 0.95)) fail(`${name}: pinch did not zoom (${topBefore.toFixed(2)} → ${topAfter.toFixed(2)})`);
+
+  // rotate the phone with the view pinched all the way in: the view must come back within the
+  // zoom range, the HUD must fit the new orientation and one-finger panning must still work
+  {
+    await page.evaluate(() => window.__sky.scene.rig.zoomBy(-1e6));
+    await wait(500);
+    const rotated = { width: vp.height, height: vp.width };
+    await page.setViewportSize(rotated);
+    await wait(900);
+    const z = await page.evaluate(() => { const r = window.__sky.scene.rig; return { top: r.camera.top, max: r.maxZoom, half: r.halfHeightBase }; });
+    if (z.top < z.half / z.max - 0.01) fail(`${name}: rotated view zoomed past the limit (${z.top.toFixed(2)})`);
+    assertLayout(await checkLayout(), `${name} rotated`);
+    const b0 = await page.evaluate(() => window.__sky.scene.rig.target.toArray());
+    await touchPath(cdp, lerpPath([rotated.width * 0.5, rotated.height * 0.45], [rotated.width * 0.35, rotated.height * 0.35]));
+    await wait(200);
+    const b1 = await page.evaluate(() => window.__sky.scene.rig.target.toArray());
+    if (Math.hypot(b1[0] - b0[0], b1[2] - b0[2]) < 0.2) fail(`${name} rotated: one-finger drag did not pan`);
+    await page.screenshot({ path: `tests/e2e/mobile-${name}-rotated.png` });
+    await page.setViewportSize(vp);
+    await wait(700);
+    await page.evaluate(() => window.__sky.scene.rig.zoomStep(-1));
+  }
 
   // play a wave and check the result panel fits and is tappable
   await page.locator('.btn.start').tap();

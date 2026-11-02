@@ -178,8 +178,27 @@ function Toolbar() {
   const towersOpen = prep || phase === 'COMBAT';
   const touch = useUi((s) => s.touchUi);
   const [hoverKind, setHoverKind] = useState<TowerKind | null>(null);
+  // Phones show one category at a time (towers / terrain) so every button keeps a readable size.
+  const [cat, setCat] = useState<'towers' | 'terrain'>('towers');
+  const shownCat = prep ? cat : 'towers'; // terrain tools only work while preparing
+  const pickCat = (c: 'towers' | 'terrain') => { setCat(c); audio.play('click'); };
+  const undo = (
+    <button className="tool-btn undo" disabled={!prep || !canUndo} onClick={() => issue({ type: 'UNDO_PREPARE' })} title="復原 (Ctrl+Z)" aria-label="復原">
+      <span className="tool-icon"><UndoIcon /></span>
+      <span className="tool-label">復原</span>
+    </button>
+  );
   return (
-    <div className={`hud-toolbar ${towersOpen ? '' : 'locked'}`}>
+    <div className={`hud-toolbar cat-${shownCat} ${towersOpen ? '' : 'locked'}`}>
+      <div className="dock-tabs" role="tablist" aria-label="工具分類">
+        <button role="tab" aria-selected={shownCat === 'towers'} className={`dock-tab ${shownCat === 'towers' ? 'on' : ''}`} onClick={() => pickCat('towers')}>
+          <TowerIcon kind="arrow" size={18} /> 防禦塔
+        </button>
+        <button role="tab" aria-selected={shownCat === 'terrain'} className={`dock-tab ${shownCat === 'terrain' ? 'on' : ''}`} disabled={!prep} onClick={() => pickCat('terrain')}>
+          <RaiseIcon /> 地形
+        </button>
+        <div className="dock-undo">{undo}</div>
+      </div>
       {hoverKind && !touch && (
         <div className="panel tower-tip">
           <div className="tower-tip-title">{TOWER_DEFS[hoverKind].name}</div>
@@ -213,12 +232,7 @@ function Toolbar() {
         <ToolButton active={tool.type === 'lower'} disabled={!prep} affordable={gold >= ECONOMY.lowerCost} hotkey="F" cost={ECONOMY.lowerCost} label="降低" icon={<LowerIcon />} onClick={() => setTool({ type: 'lower' })} tip="降低地形一格" />
         <ToolButton active={tool.type === 'wall'} disabled={!prep} affordable={gold >= ECONOMY.wallCost} hotkey="B" cost={ECONOMY.wallCost} label="木牆" icon={<WallIcon />} onClick={() => setTool({ type: 'wall' })} tip="擋路改變敵人路線，不可完全封死" />
       </div>
-      <div className="panel toolbar-group small">
-        <button className="tool-btn undo" disabled={!prep || !canUndo} onClick={() => issue({ type: 'UNDO_PREPARE' })} title="復原 (Ctrl+Z)">
-          <span className="tool-icon"><UndoIcon /></span>
-          <span className="tool-label">復原</span>
-        </button>
-      </div>
+      <div className="panel toolbar-group small">{undo}</div>
     </div>
   );
 }
