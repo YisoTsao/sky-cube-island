@@ -86,3 +86,16 @@ describe('camera fit', () => {
     expect(portraitW).toBeGreaterThan((landscapeH * 16) / 9 / 2);
   });
 });
+
+describe('camera close-up', () => {
+  it('zooms in close enough to read individual towers', () => {
+    const rig = new CameraRig(new Vector3(), { minX: -10, maxX: 10, minZ: -10, maxZ: 10 });
+    rig.setAspect(16 / 9);
+    rig.zoomBy(-1e6);
+    for (let i = 0; i < 120; i++) rig.update(1 / 30);
+    // about five cells top-to-bottom at the closest zoom
+    expect(rig.camera.top * 2).toBeLessThan(6);
+    for (let i = 0; i < 10; i++) rig.zoomStep(1);
+    expect(rig.zoomIndex).toBe(5);
+  });
+});
