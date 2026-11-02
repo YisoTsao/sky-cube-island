@@ -83,6 +83,12 @@ export function analyseFailure(ctx: FailureContext): string {
   }
   const bosses = ctx.stats.leakKinds.boss ?? 0;
   if (bosses > 0) return `${ctx.portalName(portalId)} 的岩王巨像突破了防線：牠不怕緩速，集中升級到 3 級的塔並在路線上多鋪火力。`;
+  const queens = ctx.stats.leakKinds.queen ?? 0;
+  if (queens > 0) return `${ctx.portalName(portalId)} 的史萊姆女王突破了防線：她倒下時會分裂，留足砲塔的範圍火力收拾分裂體。`;
+  const ghosts = ctx.stats.leakKinds.ghost ?? 0;
+  if (ghosts >= Math.max(2, count / 2)) return `${ctx.portalName(portalId)} 漏了 ${count} 隻，多數是霧影幽靈：牠們抗魔法，改用箭塔或砲塔。`;
+  const fast = (ctx.stats.leakKinds.salamander ?? 0) + (ctx.stats.leakKinds.boar ?? 0) + (ctx.stats.leakKinds.mole ?? 0);
+  if (fast >= Math.max(2, count / 2)) return `${ctx.portalName(portalId)} 漏了 ${count} 隻快速或會鑽地的敵人：把路線拉長，讓更多塔有時間攻擊。`;
   const knights = ctx.stats.leakKinds.knight ?? 0;
   if (knights >= Math.max(1, count / 2)) return `${ctx.portalName(portalId)} 漏了 ${count} 隻，多數是鐵甲甲蟲：物理傷害減半，多蓋冰晶塔用魔法攻擊。`;
   const minis = (ctx.stats.leakKinds.mini ?? 0) + (ctx.stats.leakKinds.splitter ?? 0);

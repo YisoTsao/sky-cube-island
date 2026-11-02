@@ -113,7 +113,7 @@ export class GameController implements SceneFeed {
     } else if (s.phase === 'WAVE_RESULT' && prev.phase !== 'WAVE_RESULT') {
       void writeSave(s);
     } else if (s.phase === 'VICTORY') {
-      void clearSave();
+      void clearSave(0, this.level.id);
     }
     // DEFEAT keeps the last safe save + checkpoint so the player can retry this wave's PREPARE.
   }

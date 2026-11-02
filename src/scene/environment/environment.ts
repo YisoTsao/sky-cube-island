@@ -4,6 +4,7 @@ import {
   BufferGeometry, Float32BufferAttribute,
 } from 'three';
 import { PALETTE } from '../palette';
+import type { LevelTheme } from '../../domain/types';
 import { VoxelModel } from '../voxel/model';
 import { createVoxelMaterial, sharedUniforms } from '../materials/voxel-material';
 
@@ -81,7 +82,30 @@ void main() {
   gl_FragColor = vec4(c, alpha * 0.92);
 }`;
 
-export interface EnvironmentOptions { center: Vector3; extent: number }
+export interface EnvironmentOptions { center: Vector3; extent: number; theme?: LevelTheme }
+
+/** Sky / light mood per level theme (presentation only). */
+interface SkyTheme {
+  top: number; mid: number; horizon: number; deep: number; sunColor: number; sunScreen: [number, number];
+  cloud: number; cloudShade: number; cloudSunTint: number; fog: number;
+  hemiSky: number; hemiGround: number; hemiIntensity: number; sunLight: number; sunIntensity: number;
+  sunDir: [number, number, number]; distantTint: [number, number, number, number]; envGround: [number, number, number];
+}
+const SKY_THEMES: Record<LevelTheme, SkyTheme> = {
+  day: {
+    top: PALETTE.skyTop, mid: PALETTE.skyMid, horizon: PALETTE.skyHorizon, deep: PALETTE.skyDeep, sunColor: 0xfff0c8, sunScreen: [0.18, 0.86],
+    cloud: PALETTE.cloud, cloudShade: PALETTE.cloudShade, cloudSunTint: 0xffe2b0, fog: PALETTE.fog,
+    hemiSky: 0xcfe6ff, hemiGround: 0x8aa66a, hemiIntensity: 0.75, sunLight: 0xffefd2, sunIntensity: 2.65,
+    sunDir: [-0.62, 1.0, 0.42], distantTint: [0.72, 0.84, 0.98, 0.5], envGround: [0.62, 0.7, 0.62],
+  },
+  // golden hour: low warm sun, violet zenith, peach horizon, rosy cloud sea
+  dusk: {
+    top: 0x4d5bb4, mid: 0xc48cc4, horizon: 0xffc58e, deep: 0x38448f, sunColor: 0xffb46e, sunScreen: [0.16, 0.66],
+    cloud: 0xfff0e4, cloudShade: 0xb89cc8, cloudSunTint: 0xffae80, fog: 0xeab8b0,
+    hemiSky: 0xffd6c2, hemiGround: 0x7d8a66, hemiIntensity: 0.72, sunLight: 0xffcf98, sunIntensity: 2.55,
+    sunDir: [-0.7, 0.72, 0.36], distantTint: [0.96, 0.74, 0.82, 0.52], envGround: [0.7, 0.62, 0.6],
+  },
+};
 
 /**
  * Sky, cloud sea, distant silhouette islands, puffy voxel clouds and the light rig
@@ -91,7 +115,8 @@ export class Environment {
   readonly group = new Group();
   readonly sun: DirectionalLight;
   readonly hemi: HemisphereLight;
-  readonly sunDir = new Vector3(-0.62, 1.0, 0.42).normalize();
+  readonly sunDir: Vector3;
+  private readonly th: SkyTheme;
   private bg: Mesh;
   private bgMat: ShaderMaterial;
   private cloudMat: ShaderMaterial;
@@ -100,12 +125,14 @@ export class Environment {
 
   constructor(private opts: EnvironmentOptions) {
     const { center } = opts;
+    const th = (this.th = SKY_THEMES[opts.theme ?? 'day']);
+    this.sunDir = new Vector3(...th.sunDir).normalize();
     this.bgMat = new ShaderMaterial({
       vertexShader: BG_VERT, fragmentShader: BG_FRAG, depthWrite: false, depthTest: false,
       uniforms: {
-        uTop: { value: new Color(PALETTE.skyTop) }, uMid: { value: new Color(PALETTE.skyMid) },
-        uHorizon: { value: new Color(PALETTE.skyHorizon) }, uDeep: { value: new Color(PALETTE.skyDeep) }, uSunColor: { value: new Color(0xfff0c8) },
-        uSun: { value: [0.18, 0.86] }, uAspect: { value: 1.6 },
+        uTop: { value: new Color(th.top) }, uMid: { value: new Color(th.mid) },
+        uHorizon: { value: new Color(th.horizon) }, uDeep: { value: new Color(th.deep) }, uSunColor: { value: new Color(th.sunColor) },
+        uSun: { value: [...th.sunScreen] }, uAspect: { value: 1.6 },
       },
     });
     this.bg = new Mesh(new PlaneGeometry(2, 2), this.bgMat);
@@ -117,8 +144,8 @@ export class Environment {
     this.cloudMat = new ShaderMaterial({
       vertexShader: CLOUD_VERT, fragmentShader: CLOUD_FRAG, transparent: true, depthWrite: false, side: DoubleSide,
       uniforms: {
-        uTime: sharedUniforms.uTime, uColor: { value: new Color(PALETTE.cloud) }, uShade: { value: new Color(PALETTE.cloudShade) },
-        uSunTint: { value: new Color(0xffe2b0) }, uLayers: { value: 2 }, uCenter: { value: [center.x, center.z] },
+        uTime: sharedUniforms.uTime, uColor: { value: new Color(th.cloud) }, uShade: { value: new Color(th.cloudShade) },
+        uSunTint: { value: new Color(th.cloudSunTint) }, uLayers: { value: 2 }, uCenter: { value: [center.x, center.z] },
       },
     });
     for (const [y, k] of [[-7.4, 1], [-9.6, 0.85]] as const) {
@@ -132,7 +159,7 @@ export class Environment {
     // soft haze under the islands
     const haze = new Mesh(new PlaneGeometry(260, 260), new ShaderMaterial({
       transparent: true, depthWrite: false,
-      uniforms: { uColor: { value: new Color(PALETTE.fog) }, uCenter: { value: [center.x, center.z] } },
+      uniforms: { uColor: { value: new Color(th.fog) }, uCenter: { value: [center.x, center.z] } },
       vertexShader: CLOUD_VERT,
       fragmentShader: `uniform vec3 uColor; uniform vec2 uCenter; varying vec2 vXZ; varying vec3 vWorld;
         void main(){ float r = length(vXZ-uCenter); gl_FragColor = vec4(uColor, 0.28*(1.0-smoothstep(10.0, 80.0, r))); }`,
@@ -146,10 +173,10 @@ export class Environment {
     this.buildDistantIslands();
 
     // lights
-    this.hemi = new HemisphereLight(0xcfe6ff, 0x8aa66a, 0.75);
+    this.hemi = new HemisphereLight(th.hemiSky, th.hemiGround, th.hemiIntensity);
     this.group.add(this.hemi);
     this.group.add(new AmbientLight(0xffffff, 0.08));
-    this.sun = new DirectionalLight(0xffefd2, 2.65);
+    this.sun = new DirectionalLight(th.sunLight, th.sunIntensity);
     this.sun.castShadow = true;
     this.sun.shadow.bias = -0.00025;
     this.sun.shadow.normalBias = 0.035;
@@ -185,12 +212,12 @@ export class Environment {
     const mat = new ShaderMaterial({
       vertexShader: SKY_VERT, fragmentShader: SKY_FRAG, side: BackSide, depthWrite: false,
       uniforms: {
-        uTop: { value: new Color(PALETTE.skyTop) }, uMid: { value: new Color(PALETTE.skyMid) },
-        uHorizon: { value: new Color(PALETTE.skyHorizon) }, uSunDir: { value: this.sunDir.clone() }, uSunColor: { value: new Color(0xfff0c8) },
+        uTop: { value: new Color(this.th.top) }, uMid: { value: new Color(this.th.mid) },
+        uHorizon: { value: new Color(this.th.horizon) }, uSunDir: { value: this.sunDir.clone() }, uSunColor: { value: new Color(this.th.sunColor) },
       },
     });
     const ground = new Mesh(new SphereGeometry(10, 32, 16, 0, Math.PI * 2, Math.PI * 0.55, Math.PI * 0.45), new ShaderMaterial({
-      side: BackSide, vertexShader: SKY_VERT, fragmentShader: 'void main(){ gl_FragColor = vec4(0.62,0.7,0.62,1.0); }',
+      side: BackSide, vertexShader: SKY_VERT, fragmentShader: `void main(){ gl_FragColor = vec4(${this.th.envGround.map((v) => v.toFixed(3)).join(',')},1.0); }`,
     }));
     skyScene.add(new Mesh(new SphereGeometry(10, 32, 16), mat));
     skyScene.add(ground);
@@ -230,7 +257,7 @@ export class Environment {
   private buildDistantIslands() {
     const { center } = this.opts;
     const mat = createVoxelMaterial({ bevel: 0.05 });
-    mat.userData.uniforms.uTint.value.set(0.72, 0.84, 0.98, 0.5);
+    mat.userData.uniforms.uTint.value.set(...this.th.distantTint);
     const isl: [number, number, number, number, number][] = [
       [-46, -3, -34, 1.3, 1], [56, 0, -40, 1.8, 2], [62, -6, 30, 1.2, 3], [-58, -1, 34, 1.5, 4], [6, -8, -58, 1.1, 5],
     ];

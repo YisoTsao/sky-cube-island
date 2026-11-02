@@ -47,6 +47,22 @@ export function EnemyIcon({ kind, size = 22 }: { kind: EnemyKind; size?: number 
   if (kind === 'boss') return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden><rect x="2" y="7" width="20" height="13" rx="2" fill="#6d6670" stroke="#4a444f" strokeWidth="1.5" /><path d="M4 7 6 2l3 4 3-5 3 5 3-4 2 5Z" fill="#f2c14e" stroke="#c9932f" strokeWidth="1" strokeLinejoin="round" /><rect x="7" y="11" width="3" height="2" fill="#ff6a2a" /><rect x="14" y="11" width="3" height="2" fill="#ff6a2a" /><path d="M8 16h8" stroke="#ff6a2a" strokeWidth="1.5" /></svg>
   );
+  if (kind === 'boar') return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden><path d="M2 17c0-6 4-10 10-10 4 0 7 2 9 5v5Z" fill="#9a5b3c" stroke="#6e3c27" strokeWidth="1.4" strokeLinejoin="round" /><path d="M8 7l1-2 1 2M11 6.5l1-2 1 2M14 7l1-2 1 2" stroke="#6e3c27" strokeWidth="1.2" fill="none" /><path d="M19 15c1 2 2 2 3 1" stroke="#f4ead2" strokeWidth="1.8" fill="none" strokeLinecap="round" /><circle cx="17" cy="11" r="1.1" fill="#ff6a2a" /><rect x="5" y="17" width="2" height="4" fill="#6e3c27" /><rect x="14" y="17" width="2" height="4" fill="#6e3c27" /></svg>
+  );
+  if (kind === 'ghost') return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden><path d="M4 21V11a8 8 0 0 1 16 0v10l-2.7-2-2.6 2-2.7-2-2.7 2-2.6-2Z" fill="#cfd8ff" stroke="#8c97d8" strokeWidth="1.4" strokeLinejoin="round" opacity=".92" /><rect x="8" y="10" width="2.4" height="3" rx="1" fill="#9fe8ff" /><rect x="13.6" y="10" width="2.4" height="3" rx="1" fill="#9fe8ff" /></svg>
+  );
+  if (kind === 'crab') return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden><path d="M3 9l2-4 2 3M21 9l-2-4-2 3" stroke="#2f8f93" strokeWidth="1.8" fill="none" strokeLinecap="round" /><ellipse cx="12" cy="15" rx="8.5" ry="5" fill="#4fc6c0" stroke="#2f8f93" strokeWidth="1.4" /><path d="M10 11l1-5 1.5 5M13 11l1.5-4 1 4" fill="#b48cff" stroke="#7f4fd6" strokeWidth=".8" /><circle cx="9" cy="14" r="1" fill="#1d2333" /><circle cx="15" cy="14" r="1" fill="#1d2333" /></svg>
+  );
+  if (kind === 'mole') return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden><path d="M1 21c2-3 5-4 11-4s9 1 11 4Z" fill="#a0704a" /><circle cx="12" cy="12" r="7" fill="#6b5446" stroke="#4a382e" strokeWidth="1.4" /><ellipse cx="12" cy="14.5" rx="2" ry="1.4" fill="#ff9fb0" /><circle cx="9.5" cy="11" r="1" fill="#1d2333" /><circle cx="14.5" cy="11" r="1" fill="#1d2333" /><path d="M4 17l2-2M20 17l-2-2" stroke="#e8dcc2" strokeWidth="2" strokeLinecap="round" /></svg>
+  );
+  if (kind === 'salamander') return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden><path d="M3 14c2-3 6-4 11-3l4 1c2 .5 3 1.5 3 2.5S20 16 18 16l-4 .5c-5 .5-9-.5-11-2.5Z" fill="#ff5d3a" stroke="#c23a22" strokeWidth="1.3" strokeLinejoin="round" /><path d="M3 14c-1-3 0-6 1-8 0 2 1 3 2 4" fill="#ffb030" stroke="#ff8a1a" strokeWidth="1" /><circle cx="18" cy="13" r="1" fill="#1d2333" /><path d="M8 16l-1 3M14 16.5l1 3" stroke="#c23a22" strokeWidth="1.5" strokeLinecap="round" /></svg>
+  );
+  if (kind === 'queen') return blob(size, '#5fd8c0', '#2fa58e', <><path d="M7 7 8 3l2 3 2-4 2 4 2-3 1 4Z" fill="#f2c14e" stroke="#c9932f" strokeWidth=".8" strokeLinejoin="round" /><circle cx="9" cy="17" r="1.5" fill="#b07aff" /><circle cx="15" cy="17" r="1.5" fill="#b07aff" /></>);
   if (kind === 'runner') return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden><path d="M2 14 7 9h9l5 3-2 3h-3l-1 5h-2l-1-4H9l-2 4H5l1-5Z" fill="#ff9a3c" stroke="#d8691f" strokeWidth="1.2" strokeLinejoin="round" /><circle cx="17.5" cy="11.5" r="1" fill="#1d2333" /></svg>
   );

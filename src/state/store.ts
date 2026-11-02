@@ -3,6 +3,7 @@ import type { CellId, GamePhase } from '../domain/types';
 import type { PreviewInfo, Tool } from '../presentation/feed';
 import type { WaveStats } from '../presentation/stats';
 import { DEFAULT_SETTINGS, type SettingsV1 } from '../settings/settings';
+import { loadProgress, type ProgressV1 } from '../persistence/progress';
 
 export type Selection =
   | { type: 'tower'; id: string }
@@ -17,6 +18,10 @@ export interface HoverInfo { cellId: CellId; platform: string; elevation: number
 /** Low-frequency HUD state (Tech §8.2: never per-enemy per-tick React renders). */
 export interface UiState {
   screen: 'title' | 'game';
+  /** Active level (the game view remounts when it changes). */
+  levelId: string;
+  levelName: string;
+  progress: ProgressV1;
   phase: GamePhase;
   gold: number;
   coreHp: number;
@@ -57,6 +62,9 @@ export interface UiState {
 let toastId = 1;
 export const useUi = create<UiState>((set, get) => ({
   screen: 'title',
+  levelId: 'L1-01',
+  levelName: '',
+  progress: loadProgress(),
   phase: 'MENU',
   gold: 0,
   coreHp: 20,

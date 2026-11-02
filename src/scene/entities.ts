@@ -121,19 +121,29 @@ export class EnemyView {
   readonly height: number;
   hpRatio = 1;
   slowed = false;
+  /** Mole underground (untargetable) — body sinks, dirt mound shows. */
+  burrowed = false;
+  /** Boar below its enrage threshold — red tint, faster gait. */
+  enraged = false;
+  private burrowK = 0;
   lastPos = new Vector3();
   facing = 0;
   constructor(readonly id: string, readonly kind: EnemyKind, readonly laneOffset: number) {
     const g = enemyGeometry(kind);
     this.height = g.height;
-    const jelly = kind === 'slime' || kind === 'mini' || kind === 'splitter';
-    this.mat = createVoxelMaterial({ bevel: 0.012, transparent: jelly, opacity: jelly ? 0.9 : 1, roughness: jelly ? 0.35 : kind === 'knight' ? 0.45 : 0.85 });
+    const jelly = kind === 'slime' || kind === 'mini' || kind === 'splitter' || kind === 'queen';
+    const ghost = kind === 'ghost';
+    this.mat = createVoxelMaterial({
+      bevel: 0.012, transparent: jelly || ghost, opacity: ghost ? 0.72 : jelly ? 0.9 : 1,
+      roughness: jelly ? 0.35 : kind === 'knight' || kind === 'crab' ? 0.45 : 0.85,
+    });
     this.body = new Mesh(g.body, this.mat);
     this.body.castShadow = true;
     this.group.add(this.body);
     if (g.extra) {
-      const glowing = kind === 'golem' || kind === 'boss' || kind === 'wisp' || kind === 'splitter';
-      const extraMat = glowing ? createVoxelMaterial({ emissiveStrength: kind === 'splitter' ? 1.4 : 3 }) : this.mat;
+      const glowing = kind !== 'runner' && kind !== 'mole';
+      const extraMat = kind === 'mole' ? createVoxelMaterial({ bevel: 0.012 })
+        : glowing ? createVoxelMaterial({ emissiveStrength: kind === 'splitter' || kind === 'queen' ? 1.4 : kind === 'crab' ? 2 : 3 }) : this.mat;
       this.extra = new Mesh(g.extra, extraMat);
       this.extra.castShadow = true;
       if (kind === 'runner') this.extra.position.set(0, 0.36, -0.42);
@@ -147,9 +157,38 @@ export class EnemyView {
     this.squash = Math.max(0, this.squash - dt * 6);
     this.mat.userData.uniforms.uFlash.value = this.flash * 1.4;
     const tint = this.mat.userData.uniforms.uTint.value;
-    if (this.slowed) tint.set(0.62, 0.86, 1.0, 0.42); else tint.set(1, 1, 1, 0);
+    if (this.slowed) tint.set(0.62, 0.86, 1.0, 0.42);
+    else if (this.enraged) tint.set(1.0, 0.35, 0.25, 0.32 + Math.sin(this.t * 18) * 0.08);
+    else tint.set(1, 1, 1, 0);
     const s = this.squash;
-    if (this.kind === 'slime' || this.kind === 'mini' || this.kind === 'splitter') {
+    if (this.kind === 'mole') {
+      this.burrowK += ((this.burrowed ? 1 : 0) - this.burrowK) * Math.min(1, dt * 9);
+      const k = this.burrowK;
+      this.body.position.y = -k * 0.55 + (moving ? Math.abs(Math.sin(this.t * 9)) * 0.03 : 0);
+      this.body.scale.set(1 + s * 0.05, (1 - s * 0.05) * (1 - k * 0.4), 1 + s * 0.05);
+      this.body.visible = k < 0.95;
+      if (this.extra) { this.extra.scale.setScalar(0.02 + k * (0.9 + Math.sin(this.t * 10) * 0.05)); this.extra.visible = k > 0.02; }
+    } else if (this.kind === 'ghost') {
+      const bob = Math.sin(this.t * 2.4) * 0.07;
+      this.body.position.y = 0.12 + bob;
+      this.body.rotation.z = Math.sin(this.t * 1.7) * 0.07;
+      this.body.scale.setScalar(1 + s * 0.08);
+      if (this.extra) { this.extra.position.y = this.body.position.y; this.extra.rotation.z = this.body.rotation.z; this.extra.scale.setScalar(1 + Math.sin(this.t * 4) * 0.05); }
+    } else if (this.kind === 'salamander') {
+      this.body.rotation.y = Math.sin(this.t * 14) * 0.14;
+      this.body.position.y = Math.abs(Math.sin(this.t * 14)) * 0.02;
+      if (this.extra) { this.extra.rotation.y = this.body.rotation.y; this.extra.scale.set(1, 1 + Math.sin(this.t * 22) * 0.2, 1); }
+    } else if (this.kind === 'crab') {
+      this.body.rotation.z = Math.sin(this.t * 7) * 0.06;
+      this.body.position.y = Math.abs(Math.sin(this.t * 7)) * 0.025;
+      this.body.scale.set(1 + s * 0.05, 1 - s * 0.05, 1 + s * 0.05);
+      if (this.extra) { this.extra.rotation.z = this.body.rotation.z; this.extra.position.y = this.body.position.y; }
+    } else if (this.kind === 'boar') {
+      const f = this.enraged ? 15 : 10;
+      this.body.position.y = Math.abs(Math.sin(this.t * f)) * 0.06;
+      this.body.rotation.x = Math.sin(this.t * f) * 0.05 + (this.enraged ? 0.1 : 0) - s * 0.2;
+      if (this.extra) { this.extra.position.y = this.body.position.y; this.extra.rotation.x = this.body.rotation.x; }
+    } else if (this.kind === 'slime' || this.kind === 'mini' || this.kind === 'splitter' || this.kind === 'queen') {
       const hop = moving ? Math.abs(Math.sin(this.t * 6.5)) : 0;
       const sq = 1 + Math.sin(this.t * 13) * 0.12 * (moving ? 1 : 0.3) + s * 0.2;
       this.body.scale.set(1 / Math.sqrt(sq), sq, 1 / Math.sqrt(sq));
