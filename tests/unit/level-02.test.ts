@@ -64,12 +64,11 @@ describe('campaign progress', () => {
     (globalThis as { localStorage?: unknown }).localStorage = {
       getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k),
     };
-    let p = loadProgress();
-    expect(isUnlocked('L1-01', p)).toBe(true);
-    expect(isUnlocked('L1-02', p)).toBe(false);
-    p = recordVictory('L1-01', 3);
-    p = recordVictory('L1-01', 1);
-    expect(p.best['L1-01']).toBe(3);
+    const p0 = loadProgress();
+    expect(isUnlocked('L1-01', p0)).toBe(true);
+    expect(isUnlocked('L1-02', p0)).toBe(false);
+    recordVictory('L1-01', 3);
+    expect(recordVictory('L1-01', 1).best['L1-01']).toBe(3);
     expect(isUnlocked('L1-02', loadProgress())).toBe(true);
     delete (globalThis as { localStorage?: unknown }).localStorage;
   });
