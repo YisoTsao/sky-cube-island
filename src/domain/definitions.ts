@@ -65,6 +65,31 @@ export const ENEMY_DEFS: Record<EnemyKind, EnemyDef> = {
     kind: 'queen', name: '史萊姆女王', hp: 1700, speedCellsPerSecond: 0.4, coreDamage: 5, goldReward: 120, physicalResistance: 0.15, targetOffsetWorld: 0.95,
     slowResistance: 0.5, splitInto: { kind: 'splitter', count: 3 }, scale: 1.9,
   },
+  // v2.4 roster (levels 3–4).
+  bat: {
+    kind: 'bat', name: '冰洞蝙蝠', hp: 45, speedCellsPerSecond: 1.9, coreDamage: 1, goldReward: 2, physicalResistance: 0, targetOffsetWorld: 0.7,
+    scale: 0.85,
+  },
+  yeti: {
+    kind: 'yeti', name: '雪原巨猿', hp: 380, speedCellsPerSecond: 0.75, coreDamage: 2, goldReward: 11, physicalResistance: 0.15, magicResistance: 0.4, targetOffsetWorld: 0.6,
+    slowResistance: 1, scale: 1.1,
+  },
+  shaman: {
+    kind: 'shaman', name: '護盾薩滿', hp: 160, speedCellsPerSecond: 0.9, coreDamage: 1, goldReward: 9, physicalResistance: 0, targetOffsetWorld: 0.5,
+    shieldAura: { radiusWorld: 1.8, reduction: 0.35 },
+  },
+  frostGiant: {
+    kind: 'frostGiant', name: '冰霜巨人', hp: 2200, speedCellsPerSecond: 0.4, coreDamage: 5, goldReward: 130, physicalResistance: 0.3, magicResistance: 0.2, targetOffsetWorld: 0.95,
+    slowResistance: 1, scale: 1.8,
+  },
+  imp: {
+    kind: 'imp', name: '熔岩小鬼', hp: 110, speedCellsPerSecond: 1.5, coreDamage: 1, goldReward: 5, physicalResistance: 0.3, targetOffsetWorld: 0.35,
+    scale: 0.9,
+  },
+  phoenix: {
+    kind: 'phoenix', name: '不死火鳥', hp: 2200, speedCellsPerSecond: 0.55, coreDamage: 5, goldReward: 150, physicalResistance: 0, magicResistance: 0.3, targetOffsetWorld: 1.0,
+    slowResistance: 0.5, rebirth: { hpRatio: 0.6 }, scale: 1.5,
+  },
 };
 
 /** GDD §4.4 / §6 terrain economy. */

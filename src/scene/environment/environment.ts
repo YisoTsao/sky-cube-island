@@ -105,6 +105,20 @@ const SKY_THEMES: Record<LevelTheme, SkyTheme> = {
     hemiSky: 0xffd6c2, hemiGround: 0x7d8a66, hemiIntensity: 0.72, sunLight: 0xffcf98, sunIntensity: 2.55,
     sunDir: [-0.7, 0.72, 0.36], distantTint: [0.96, 0.74, 0.82, 0.52], envGround: [0.7, 0.62, 0.6],
   },
+  // crisp winter noon: pale blue sky, bright cold light, white cloud sea
+  snow: {
+    top: 0x6a9ee2, mid: 0xb6d4f2, horizon: 0xf0f7ff, deep: 0x4f7cc6, sunColor: 0xfff6e8, sunScreen: [0.22, 0.8],
+    cloud: 0xffffff, cloudShade: 0xb6c6e2, cloudSunTint: 0xf2f4ff, fog: 0xdce8f6,
+    hemiSky: 0xe6f0ff, hemiGround: 0xb8c6d6, hemiIntensity: 0.82, sunLight: 0xfff4e8, sunIntensity: 2.35,
+    sunDir: [-0.55, 0.95, 0.5], distantTint: [0.86, 0.92, 1.0, 0.55], envGround: [0.8, 0.84, 0.9],
+  },
+  // volcanic sky city: maroon-violet sky, lava-orange horizon, smouldering ash sea
+  ember: {
+    top: 0x2e1d44, mid: 0x86344a, horizon: 0xff9450, deep: 0x22163a, sunColor: 0xff7a3a, sunScreen: [0.2, 0.58],
+    cloud: 0xa0646a, cloudShade: 0x40263a, cloudSunTint: 0xff7a44, fog: 0x8a4440,
+    hemiSky: 0xffbe9a, hemiGround: 0x5a3232, hemiIntensity: 0.78, sunLight: 0xffbf86, sunIntensity: 2.5,
+    sunDir: [-0.65, 0.82, 0.4], distantTint: [0.58, 0.32, 0.34, 0.6], envGround: [0.45, 0.28, 0.25],
+  },
 };
 
 /**

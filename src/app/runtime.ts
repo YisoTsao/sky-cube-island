@@ -9,8 +9,8 @@ import type { SfxId } from '../audio/sfx-registry';
 import type { SceneApp } from '../scene/scene-app';
 import { loadSettings } from '../settings/settings';
 
-const HEAVY_KINDS = new Set<EnemyKind>(['golem', 'knight', 'boss', 'crab', 'queen', 'boar']);
-const SWIFT_KINDS = new Set<EnemyKind>(['runner', 'wisp', 'ghost', 'salamander', 'mole']);
+const HEAVY_KINDS = new Set<EnemyKind>(['golem', 'knight', 'boss', 'crab', 'queen', 'boar', 'yeti', 'frostGiant', 'phoenix']);
+const SWIFT_KINDS = new Set<EnemyKind>(['runner', 'wisp', 'ghost', 'salamander', 'mole', 'bat', 'imp', 'shaman']);
 
 const params = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
 const initialId = params.get('level');

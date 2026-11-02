@@ -139,6 +139,20 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
     }
   }
 
+  // Shield auras: damage reduction for allies standing near a living shaman (not the shaman itself).
+  const shamans = enemies.filter((e) => ENEMY_DEFS[e.kind].shieldAura && e.state === 'moving' && !isBurrowed(e, tick));
+  const shielding = (v: EnemyInstance): number => {
+    let best = 0;
+    if (!shamans.length) return 0;
+    const vp = aimPoint(map, v).p;
+    for (const sh of shamans) {
+      if (sh === v || sh.state !== 'moving') continue;
+      const aura = ENEMY_DEFS[sh.kind].shieldAura!;
+      if (aura.reduction > best && distance3D(aimPoint(map, sh).p, vp) <= aura.radiusWorld) best = aura.reduction;
+    }
+    return best;
+  };
+
   // 4–5. Towers: cooldown, FIRST targeting with 3D range + LOS, damage resolved this tick.
   const towers: TowerInstance[] = state.towers.map((t) => ({ ...t }));
   const towersOrdered = [...towers].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
@@ -185,13 +199,22 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
     for (const v of victims) {
       const edef = ENEMY_DEFS[v.kind];
       const resist = def.damageType === 'physical' ? edef.physicalResistance : (edef.magicResistance ?? 0);
-      const resisted = resist > 0;
-      const amount = Math.max(0, Math.round(def.baseDamage * LEVEL_DAMAGE_MULT[t.level] * (1 - resist)));
+      const shield = shielding(v);
+      const resisted = resist > 0 || shield > 0;
+      const amount = Math.max(0, Math.round(def.baseDamage * LEVEL_DAMAGE_MULT[t.level] * (1 - resist) * (1 - shield)));
       v.hp = Math.max(0, v.hp - amount);
       events.push({ type: 'ENEMY_DAMAGED', tick, enemyId: v.id, sourceTowerId: t.id, amount, damageType: def.damageType, resisted, hpAfter: v.hp });
       if (def.slow && v.hp > 0) {
         v.slowUntilTick = tick + def.slow.durationTicks;
         events.push({ type: 'ENEMY_SLOWED', tick, enemyId: v.id, untilTick: v.slowUntilTick });
+      }
+      if (v.hp <= 0 && edef.rebirth && !v.reborn) {
+        // First death: rise again on the spot (no gold yet).
+        v.reborn = true;
+        v.hp = Math.max(1, Math.round(v.maxHp * edef.rebirth.hpRatio));
+        v.slowUntilTick = -1;
+        events.push({ type: 'ENEMY_REBORN', tick, enemyId: v.id, kind: v.kind, hpAfter: v.hp });
+        continue;
       }
       if (v.hp <= 0) {
         v.state = 'dead';

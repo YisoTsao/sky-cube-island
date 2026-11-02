@@ -3,7 +3,7 @@ import { z } from 'zod';
 const elevation = z.number().int().min(0).max(6);
 const gridPos = z.object({ x: z.number().int(), z: z.number().int() });
 const towerKind = z.enum(['arrow', 'frost', 'cannon']);
-const enemyKind = z.enum(['slime', 'runner', 'golem', 'mini', 'splitter', 'knight', 'wisp', 'boss', 'boar', 'ghost', 'crab', 'mole', 'salamander', 'queen']);
+const enemyKind = z.enum(['slime', 'runner', 'golem', 'mini', 'splitter', 'knight', 'wisp', 'boss', 'boar', 'ghost', 'crab', 'mole', 'salamander', 'queen', 'bat', 'yeti', 'shaman', 'frostGiant', 'imp', 'phoenix']);
 
 export const SurfaceCellSchema = z.object({
   id: z.string().min(1),
@@ -38,7 +38,7 @@ export const LevelDefSchema = z.object({
   id: z.string(),
   name: z.string(),
   subtitle: z.string().optional(),
-  theme: z.enum(['day', 'dusk']).optional(),
+  theme: z.enum(['day', 'dusk', 'snow', 'ember']).optional(),
   width: z.number().int().min(4).max(64),
   depth: z.number().int().min(4).max(64),
   heightStepWorld: z.literal(0.5),

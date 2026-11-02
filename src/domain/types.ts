@@ -55,10 +55,12 @@ export interface CoreDef {
 export type TowerKind = 'arrow' | 'frost' | 'cannon';
 export type EnemyKind =
   | 'slime' | 'runner' | 'golem' | 'mini' | 'splitter' | 'knight' | 'wisp' | 'boss'
-  | 'boar' | 'ghost' | 'crab' | 'mole' | 'salamander' | 'queen';
+  | 'boar' | 'ghost' | 'crab' | 'mole' | 'salamander' | 'queen'
+  | 'bat' | 'yeti' | 'shaman' | 'frostGiant' | 'imp' | 'phoenix';
 export const ENEMY_KINDS: readonly EnemyKind[] = [
   'slime', 'runner', 'golem', 'mini', 'splitter', 'knight', 'wisp', 'boss',
   'boar', 'ghost', 'crab', 'mole', 'salamander', 'queen',
+  'bat', 'yeti', 'shaman', 'frostGiant', 'imp', 'phoenix',
 ];
 
 export interface SpawnEntry {
@@ -87,7 +89,7 @@ export interface LevelDecor {
 }
 
 /** Lighting / sky mood used by the renderer (presentation only). */
-export type LevelTheme = 'day' | 'dusk';
+export type LevelTheme = 'day' | 'dusk' | 'snow' | 'ember';
 
 export interface LevelDef {
   schemaVersion: 2;
@@ -146,6 +148,10 @@ export interface EnemyDef {
   enrage?: { belowRatio: number; speedMult: number };
   /** Spends the last `underTicks` of every `cycleTicks` (counted from spawn) underground: untargetable. */
   burrow?: { cycleTicks: number; underTicks: number };
+  /** Other enemies within `radiusWorld` take `reduction` less damage from every source. */
+  shieldAura?: { radiusWorld: number; reduction: number };
+  /** The first death revives it on the spot with `hpRatio` of its max HP (gold is paid on the final death). */
+  rebirth?: { hpRatio: number };
   /** Presentation hint: model scale + HP bar width. */
   scale?: number;
 }
@@ -182,6 +188,8 @@ export interface EnemyInstance {
   segmentProgress: number;
   slowUntilTick: number;
   spawnTick: number;
+  /** Set once a rebirth enemy has used its revive. */
+  reborn?: boolean;
 }
 
 /** Per-portal spawn queue entry, materialised at START_WAVE (D21-07). */
@@ -256,6 +264,7 @@ export type GameEvent =
       amount: number; damageType: 'physical' | 'magic'; resisted: boolean; hpAfter: number }
   | { type: 'ENEMY_SLOWED'; tick: number; enemyId: string; untilTick: number }
   | { type: 'ENEMY_HEALED'; tick: number; enemyId: string; sourceEnemyId: string; amount: number; hpAfter: number }
+  | { type: 'ENEMY_REBORN'; tick: number; enemyId: string; kind: EnemyKind; hpAfter: number }
   | { type: 'CANNON_EXPLODED'; tick: number; towerId: string; at: Vec3; hitIds: string[] }
   | { type: 'ENEMY_KILLED'; tick: number; enemyId: string; kind: EnemyKind; killerTowerId: string; gold: number }
   | { type: 'ENEMY_REACHED_CORE'; tick: number; enemyId: string; kind: EnemyKind;
@@ -275,7 +284,7 @@ export type GameEventType = GameEvent['type'];
 
 export const ALL_EVENT_TYPES: readonly GameEventType[] = [
   'PHASE_CHANGED', 'WAVE_STARTED', 'WAVE_CLEARED', 'ENEMY_SPAWNED', 'TOWER_FIRED',
-  'TOWER_BLOCKED', 'ENEMY_DAMAGED', 'ENEMY_SLOWED', 'ENEMY_HEALED', 'CANNON_EXPLODED', 'ENEMY_KILLED',
+  'TOWER_BLOCKED', 'ENEMY_DAMAGED', 'ENEMY_SLOWED', 'ENEMY_HEALED', 'ENEMY_REBORN', 'CANNON_EXPLODED', 'ENEMY_KILLED',
   'ENEMY_REACHED_CORE', 'CORE_DAMAGED', 'GOLD_CHANGED', 'TERRAIN_CHANGED', 'WALL_PLACED',
   'WALL_REMOVED', 'TOWER_BUILT', 'TOWER_UPGRADED', 'TOWER_SOLD', 'ROUTES_CHANGED',
   'UNDO_APPLIED', 'VICTORY', 'DEFEAT',

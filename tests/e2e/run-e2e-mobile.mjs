@@ -114,7 +114,15 @@ async function run(browser, name, device) {
     await page.locator('.modal .btn.primary').tap();
     await wait(400);
     if ((await page.evaluate(() => window.__sky.controller.state.phase)) !== 'PREPARE') fail(`${name}: continue tap did not advance`);
-  } else if (phase !== 'DEFEAT') fail(`${name}: wave did not resolve (${phase})`);
+  } else if (phase === 'DEFEAT') {
+    // the defeat panel must fit too; it covers the HUD, so the menu check below is skipped
+    const m = await page.evaluate(() => { const r = document.querySelector('.modal')?.getBoundingClientRect(); return r && { top: r.top, bottom: r.bottom, left: r.left, right: r.right }; });
+    if (!m || m.top < 0 || m.left < 0 || m.right > vp.width || m.bottom > vp.height) fail(`${name}: defeat modal off-screen ${JSON.stringify(m)}`);
+    await page.screenshot({ path: `tests/e2e/mobile-${name}-result.png` });
+    if (errors.length) fail(`${name}: page errors:\n` + errors.join('\n'));
+    await ctx.close();
+    return;
+  } else fail(`${name}: wave did not resolve (${phase})`);
 
   // menu → settings opens and closes on touch
   await page.locator('.hud-cam .icon-btn[aria-label="選單"]').tap();

@@ -35,8 +35,8 @@ function slimeModel([body, light, dark]: Shade, scale: number, cores = false): {
   return { body: m.build(V * scale), extra, height: 0.62 * scale };
 }
 
-function golemModel(scale: number, boss: boolean): { body: BufferGeometry; extra?: BufferGeometry; height: number } {
-  const [stone, dark, moss]: Shade = boss ? ['boss', 'bossDark', 'bossDark'] : ['golem', 'golemDark', 'golemMoss'];
+function golemModel(scale: number, boss: boolean, frost = false): { body: BufferGeometry; extra?: BufferGeometry; height: number } {
+  const [stone, dark, moss]: Shade = frost ? ['frostGiant', 'frostGiantDark', 'snow'] : boss ? ['boss', 'bossDark', 'bossDark'] : ['golem', 'golemDark', 'golemMoss'];
   const m = new VoxelModel(18, 19, 16);
   // legs
   m.box(3, 0, 5, 6, 4, 10, dark); m.box(11, 0, 5, 14, 4, 10, dark);
@@ -52,13 +52,17 @@ function golemModel(scale: number, boss: boolean): { body: BufferGeometry; extra
   m.box(4, 8, 13, 13, 11, 14, dark);
   if (boss) {
     // crown of gold spikes
-    m.box(3, 14, 5, 14, 14, 11, 'goldDark');
-    for (const x of [3, 6, 9, 12, 14]) m.box(x, 15, 7, x, 17 + (x === 9 ? 1 : 0), 8, 'gold');
+    m.box(3, 14, 5, 14, 14, 11, frost ? 'frostGiantDark' : 'goldDark');
+    for (const x of [3, 6, 9, 12, 14]) m.box(x, 15, 7, x, 17 + (x === 9 ? 1 : 0), 8, frost ? 'ice' : 'gold');
   }
   const eyes = new VoxelModel(18, 19, 16);
-  const eye: PaletteKey = boss ? 'bossLava' : 'golemEye';
+  const eye: PaletteKey = frost ? 'crystalLight' : boss ? 'bossLava' : 'golemEye';
   eyes.box(5, 9, 14, 6, 10, 14, eye); eyes.box(11, 9, 14, 12, 10, 14, eye);
-  if (boss) {
+  if (frost) {
+    // ice crystals jutting from shoulders and back
+    for (const [x, z, h] of [[1, 6, 5], [16, 7, 6], [5, 4, 4], [12, 4, 5], [8, 5, 6]] as const) eyes.box(x, 13, z, x + 1, 13 + h, z + 1, x % 2 ? 'ice' : 'crystal');
+  }
+  if (boss && !frost) {
     // molten cracks across the chest
     eyes.box(5, 6, 14, 12, 6, 14, 'bossLava'); eyes.box(8, 5, 14, 9, 7, 14, 'bossLava');
   }
@@ -209,6 +213,74 @@ export function enemyGeometry(kind: EnemyKind): { body: BufferGeometry; extra?: 
     c.set(7, 13, 6, 'crabCrystal');
     return { body: mergeVoxel(r.body, c.build(V * scale)), extra: r.extra, height: r.height + 0.25 * scale };
   }
+  if (kind === 'bat') {
+    // round body with membrane wings (wings = extra, flapped by the view)
+    const m = new VoxelModel(10, 10, 10);
+    m.sphere(5, 5, 5, 3.4, 'bat');
+    m.box(3, 8, 5, 3, 9, 5, 'batDark'); m.box(6, 8, 5, 6, 9, 5, 'batDark');
+    m.set(3, 6, 8, 'white'); m.set(6, 6, 8, 'white'); m.set(4, 4, 8, 'white'); m.set(5, 4, 8, 'white');
+    const w = new VoxelModel(26, 10, 10);
+    for (let i = 0; i < 8; i++) { w.box(i, 4 + (i % 3 === 0 ? 1 : 0), 3, i, 6, 6, i % 2 ? 'batWing' : 'batDark'); w.box(25 - i, 4 + (i % 3 === 0 ? 1 : 0), 3, 25 - i, 6, 6, i % 2 ? 'batWing' : 'batDark'); }
+    return { body: m.build(V * scale, { originY: 4 * V }), extra: w.build(V * scale, { originY: 4 * V }), height: 0.95 };
+  }
+  if (kind === 'yeti') {
+    // shaggy white ape: broad shoulders, blue face, curled horns, long arms
+    const m = new VoxelModel(18, 20, 14);
+    m.box(4, 0, 4, 7, 5, 9, 'yetiShade', true); m.box(10, 0, 4, 13, 5, 9, 'yetiShade', true);
+    m.box(3, 5, 2, 14, 14, 11, 'yeti', true);
+    m.box(1, 6, 4, 2, 15, 9, 'yeti', true); m.box(15, 6, 4, 16, 15, 9, 'yeti', true);
+    m.box(0, 2, 5, 2, 6, 8, 'yetiShade'); m.box(15, 2, 5, 17, 6, 8, 'yetiShade');
+    m.box(5, 14, 3, 12, 18, 10, 'yeti', true);
+    m.box(6, 14, 11, 11, 17, 11, 'yetiFace');
+    m.set(7, 16, 12, 'eye'); m.set(10, 16, 12, 'eye'); m.box(7, 14, 12, 10, 14, 12, 'white');
+    m.box(4, 18, 6, 5, 19, 7, 'horn'); m.box(12, 18, 6, 13, 19, 7, 'horn');
+    m.paint((x, y, z) => (x * 3 + y + z * 5) % 11 === 0, 'yetiShade');
+    return { body: m.build(V * scale), height: 1.15 * scale };
+  }
+  if (kind === 'shaman') {
+    // robed caster with golden mask and a staff topped by a shield orb (extra glows)
+    const m = new VoxelModel(16, 20, 12);
+    for (let y = 0; y < 12; y++) m.cylinder(7, 6, 4.4 - y * 0.18, y, y, y < 2 ? 'shamanDark' : 'shaman');
+    m.sphere(7, 14, 6, 3.4, 'shamanDark');
+    m.box(5, 13, 9, 9, 16, 9, 'shamanMask'); m.set(6, 15, 10, 'eye'); m.set(8, 15, 10, 'eye');
+    m.box(5, 17, 5, 9, 18, 7, 'shamanMask');
+    m.box(13, 0, 6, 13, 17, 6, 'woodDark');
+    const orb = new VoxelModel(16, 22, 12);
+    orb.sphere(13, 19, 6, 2.2, 'shield');
+    return { body: m.build(V), extra: orb.build(V, { flags: FLAG_EMISSIVE }), height: 1.15 };
+  }
+  if (kind === 'imp') {
+    // small lava devil: red body, dark horns, glowing belly and eyes
+    const m = new VoxelModel(12, 14, 12);
+    m.box(4, 0, 5, 5, 3, 6, 'impDark'); m.box(7, 0, 5, 8, 3, 6, 'impDark');
+    m.box(3, 3, 3, 8, 9, 8, 'imp', true);
+    m.box(3, 9, 3, 8, 12, 8, 'imp');
+    m.box(3, 12, 5, 3, 13, 5, 'impHorn'); m.box(8, 12, 5, 8, 13, 5, 'impHorn');
+    m.box(1, 5, 5, 2, 7, 6, 'impDark'); m.box(9, 5, 5, 10, 7, 6, 'impDark');
+    m.box(5, 2, 0, 6, 3, 2, 'impDark');
+    const g = new VoxelModel(12, 14, 12);
+    g.set(4, 11, 9, 'lava'); g.set(7, 11, 9, 'lava'); g.box(4, 5, 9, 7, 7, 9, 'lava');
+    return { body: m.build(V * scale), extra: g.build(V * scale, { flags: FLAG_EMISSIVE }), height: 0.8 * scale };
+  }
+  if (kind === 'phoenix') {
+    // fire bird: body + head + crest; wings and tail are glowing flame (extra)
+    const m = new VoxelModel(14, 16, 20);
+    m.sphere(7, 7, 9, 4.2, 'phoenix', 1, true);
+    m.sphere(7, 11, 13, 2.6, 'phoenixDeep');
+    m.box(6, 10, 16, 7, 11, 17, 'phoenixGold');
+    m.set(5, 12, 15, 'eye'); m.set(8, 12, 15, 'eye');
+    m.box(4, 0, 8, 5, 3, 9, 'phoenixGold'); m.box(8, 0, 8, 9, 3, 9, 'phoenixGold');
+    const f = new VoxelModel(34, 18, 24);
+    for (let i = 0; i < 10; i++) {
+      const y = 8 + Math.round(i * 0.5);
+      f.box(9 - i, y, 6, 9 - i, y + 1, 12 - Math.floor(i / 2), i % 3 ? 'phoenix' : 'phoenixGold');
+      f.box(24 + i, y, 6, 24 + i, y + 1, 12 - Math.floor(i / 2), i % 3 ? 'phoenix' : 'phoenixGold');
+    }
+    for (let z = 0; z < 6; z++) f.box(16 - (z % 2), 6 + z, z, 17 + (z % 2), 7 + z, z, z % 2 ? 'phoenixGold' : 'lava');
+    f.box(16, 14, 13, 17, 17, 14, 'phoenixGold');
+    return { body: m.build(V * scale), extra: f.build(V * scale, { flags: FLAG_EMISSIVE }), height: 1.0 * scale };
+  }
+  if (kind === 'frostGiant') return golemModel(scale, true, true);
   return golemModel(scale, kind === 'boss');
 }
 
@@ -226,7 +298,10 @@ export function wallGeometry(): BufferGeometry {
   return m.build(V);
 }
 
-export function treeGeometry(variant: number): { trunk: BufferGeometry; leaves: BufferGeometry } {
+export type Foliage = 'green' | 'snow' | 'autumn';
+
+export function treeGeometry(variant: number, foliage: Foliage = 'green'): { trunk: BufferGeometry; leaves: BufferGeometry } {
+  if (foliage === 'snow') return pineGeometry(variant);
   const t = new VoxelModel(16, 20, 16);
   const h = 9 + (variant % 3) * 2;
   t.box(7, 0, 7, 8, h, 8, 'trunk');
@@ -236,10 +311,28 @@ export function treeGeometry(variant: number): { trunk: BufferGeometry; leaves: 
   const blobs = variant % 2 === 0
     ? [[12, 5, 12, 6.2], [9, 8, 13, 4.2], [15, 9, 11, 4], [12, 11, 12, 3.4]]
     : [[12, 4, 12, 5.4], [12, 8, 12, 4.6], [12, 11.5, 12, 3.2], [9, 5, 9, 3.2], [15, 5, 15, 3.2]];
-  for (const [x, y, z, r] of blobs) l.sphere(x!, y!, z!, r!, 'leaf');
-  l.paint((x, y, z) => y > 9 || (x + z + y) % 7 === 0, 'leafLight');
-  l.paint((_x, y) => y < 3, 'leafDark');
+  const [leaf, light, dark]: Shade = foliage === 'autumn' ? ['autumn', 'autumnLight', 'autumnDark'] : ['leaf', 'leafLight', 'leafDark'];
+  for (const [x, y, z, r] of blobs) l.sphere(x!, y!, z!, r!, leaf);
+  l.paint((x, y, z) => y > 9 || (x + z + y) % 7 === 0, light);
+  l.paint((_x, y) => y < 3, dark);
   return { trunk: t.build(V), leaves: l.build(V, { originY: (h - 2) * V }) };
+}
+
+/** Snow-capped pine: stacked cones with white tips. */
+function pineGeometry(variant: number): { trunk: BufferGeometry; leaves: BufferGeometry } {
+  const t = new VoxelModel(16, 8, 16);
+  t.box(7, 0, 7, 8, 5, 8, 'trunkDark');
+  const l = new VoxelModel(20, 26, 20);
+  const tiers = 3 + (variant % 2);
+  for (let i = 0; i < tiers; i++) {
+    const y0 = i * 5;
+    for (let y = 0; y < 7; y++) {
+      const r = (7.5 - i * 1.4) * (1 - y / 7) + 0.6;
+      l.cylinder(10, 10, r, y0 + y, y0 + y, y >= 4 ? 'snow' : i % 2 ? 'pine' : 'pineDark');
+    }
+  }
+  l.paint((x, y, z) => (x + z + y) % 9 === 0, 'snowShade');
+  return { trunk: t.build(V), leaves: l.build(V, { originY: 4 * V }) };
 }
 
 export function rockGeometry(variant: number): BufferGeometry {
@@ -259,10 +352,10 @@ export function flowerGeometry(color: 'flowerY' | 'flowerP' | 'flowerW' | 'flowe
   return m.build(V);
 }
 
-export function grassTuftGeometry(): BufferGeometry {
+export function grassTuftGeometry([g, gl, gd]: Shade = ['grass', 'grassLight', 'grassDark']): BufferGeometry {
   const m = new VoxelModel(6, 5, 6);
-  m.box(1, 0, 2, 1, 3, 2, 'grassLight'); m.box(3, 0, 1, 3, 4, 1, 'grass'); m.box(4, 0, 4, 4, 2, 4, 'grassDark');
-  m.box(2, 0, 4, 2, 2, 4, 'grassLight');
+  m.box(1, 0, 2, 1, 3, 2, gl); m.box(3, 0, 1, 3, 4, 1, g); m.box(4, 0, 4, 4, 2, 4, gd);
+  m.box(2, 0, 4, 2, 2, 4, gl);
   return m.build(V);
 }
 

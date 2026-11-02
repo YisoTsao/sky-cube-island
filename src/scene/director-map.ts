@@ -14,6 +14,7 @@ export const DIRECTOR_REACTIONS: Record<GameEventType, string> = {
   ENEMY_DAMAGED: 'on impact: white flash, squash, damage number, resist sparks',
   ENEMY_SLOWED: 'frost tint + frost sparkles',
   ENEMY_HEALED: 'green heal sparkles on the healed enemy',
+  ENEMY_REBORN: 'fire burst + ring as the phoenix rises again',
   CANNON_EXPLODED: 'on impact: fireball sparks, voxel debris, scorch decal, small shake',
   ENEMY_KILLED: 'on impact: voxel shatter + coin fly to HUD',
   ENEMY_REACHED_CORE: 'enemy dissolves into the core',

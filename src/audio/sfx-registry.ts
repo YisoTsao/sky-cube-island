@@ -20,6 +20,7 @@ export const SFX_FOR_EVENT: Record<GameEventType, SfxId | 'none' | 'dynamic'> = 
   ENEMY_DAMAGED: 'dynamic',   // arrowHit / frostHit / resist
   ENEMY_SLOWED: 'none',
   ENEMY_HEALED: 'none',
+  ENEMY_REBORN: 'explosion',
   CANNON_EXPLODED: 'explosion',
   ENEMY_KILLED: 'dynamic',    // deathSlime / deathRunner / deathGolem
   ENEMY_REACHED_CORE: 'none',
