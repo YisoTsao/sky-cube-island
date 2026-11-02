@@ -15,10 +15,17 @@ import {
 const TOWER_ORDER: TowerKind[] = ['arrow', 'frost', 'cannon'];
 const TOWER_BLURB: Record<TowerKind, string> = {
   arrow: '單體物理傷害，射速快。高地加射程。',
-  frost: '魔法傷害並緩速 30%。適合放在轉角。',
+  frost: '魔法傷害並緩速 30%，無視鐵甲甲蟲的物抗。適合放在轉角。',
   cannon: '範圍爆炸，對付成群敵人。巨人也怕砲擊。',
 };
-const ENEMY_NAMES: Record<EnemyKind, string> = { slime: ENEMY_DEFS.slime.name, runner: ENEMY_DEFS.runner.name, golem: ENEMY_DEFS.golem.name };
+const ENEMY_TRAIT: Partial<Record<EnemyKind, string>> = {
+  mini: '成群出現，適合用砲塔清場',
+  splitter: '死亡時分裂成 3 隻小果凍',
+  knight: '厚甲：物理傷害減半，用冰晶塔的魔法攻擊',
+  wisp: '每 2 秒治療身邊的同伴，優先擊倒',
+  boss: '最終波頭目，緩速效果減半，漏掉會扣 5 點核心',
+};
+const ENEMY_NAMES = Object.fromEntries(Object.values(ENEMY_DEFS).map((d) => [d.kind, d.name])) as Record<EnemyKind, string>;
 
 function openMenu() {
   const u = useUi.getState();
@@ -134,10 +141,11 @@ function Toolbar() {
   const phase = useUi((s) => s.phase);
   const canUndo = useUi((s) => s.canUndo);
   const prep = phase === 'PREPARE';
+  const towersOpen = prep || phase === 'COMBAT';
   const touch = useUi((s) => s.touchUi);
   const [hoverKind, setHoverKind] = useState<TowerKind | null>(null);
   return (
-    <div className={`hud-toolbar ${prep ? '' : 'locked'}`}>
+    <div className={`hud-toolbar ${towersOpen ? '' : 'locked'}`}>
       {hoverKind && !touch && (
         <div className="panel tower-tip">
           <div className="tower-tip-title">{TOWER_DEFS[hoverKind].name}</div>
@@ -154,7 +162,7 @@ function Toolbar() {
           <div key={k} onMouseEnter={() => setHoverKind(k)} onMouseLeave={() => setHoverKind(null)}>
             <ToolButton
               active={tool.type === 'build' && tool.kind === k}
-              disabled={!prep}
+              disabled={!towersOpen}
               affordable={gold >= TOWER_DEFS[k].buildCost}
               hotkey={String(i + 1)}
               cost={TOWER_DEFS[k].buildCost}
@@ -187,6 +195,7 @@ function SelectionPanel() {
   useUi((s) => s.gold); // re-render on gold change for affordability
   if (!sel) return null;
   const prep = phase === 'PREPARE';
+  const towersOpen = prep || phase === 'COMBAT';
   if (sel.type === 'tower') {
     const t = controller.state.towers.find((x) => x.id === sel.id);
     if (!t) return null;
@@ -217,7 +226,7 @@ function SelectionPanel() {
         </div>
         {elev > 1 && <div className="sel-note good">▲ 高地加成 +{(HIGH_GROUND_PER_LEVEL * elev).toFixed(1)} 射程</div>}
         {blocked > 0 && <div className="sel-note warn">◐ {blocked} 格被地形擋住視線（顯示為斜線）</div>}
-        {prep && (
+        {towersOpen && (
           <div className="sel-actions">
             {nextLevel ? (
               <button className="btn primary" disabled={controller.state.gold < upCost} onClick={() => issue({ type: 'UPGRADE_TOWER', towerId: t.id })}>
@@ -309,7 +318,7 @@ function StartWave() {
   return (
     <div className="start-wave">
       <div className="panel start-wave-preview">
-        <div className="swp-title">第 {waveIndex + 1} 波來襲</div>
+        <div className="swp-title">第 {waveIndex + 1} 波來襲 · {Object.values(totals).reduce((a, b) => a + (b ?? 0), 0)} 隻</div>
         <div className="swp-enemies">
           {Object.entries(totals).map(([k, n]) => (
             <span key={k} title={ENEMY_NAMES[k as EnemyKind]}><EnemyIcon kind={k as EnemyKind} size={22} />×{n}</span>
@@ -328,13 +337,13 @@ const TUTORIAL = [
   '敵人會沿著發光路線走向守護之心。按 1 選擇箭塔，放在路線旁。',
   '在路線轉角附近建塔，能打到更多敵人。',
   '試試抬升地形（R）：高地塔射程更遠。斜線格代表視線被擋住。',
-  '準備好了就按「開始波次」。',
+  '每波至少兩分鐘、敵人很多：戰鬥中也能用擊殺金幣建塔、升級或出售。準備好就按「開始波次」。',
 ];
 const TUTORIAL_TOUCH = [
   '敵人會沿著發光路線走向守護之心。點下方的箭塔，再點路線旁的地塊。',
   '先點一下會預覽位置與花費，再點同一格就會建造。轉角附近能打到更多敵人。',
   '試試「抬升」地形：高地塔射程更遠。單指拖曳平移、雙指縮放或旋轉視角。',
-  '準備好了就按「開始波次」。',
+  '每波至少兩分鐘、敵人很多：戰鬥中也能用擊殺金幣建塔、升級或出售。準備好就按「開始波次」。',
 ];
 function Tutorial() {
   const step = useUi((s) => s.tutorialStep);
@@ -575,7 +584,7 @@ export function HelpPanel() {
         <div className="help-grid">{rows.map(([k, v]) => <div key={k} className="help-row"><kbd>{k}</kbd><span>{v}</span></div>)}</div>
         <div className="help-enemies">
           {(Object.keys(ENEMY_DEFS) as EnemyKind[]).map((k) => (
-            <div key={k} className="help-enemy"><EnemyIcon kind={k} size={26} /><b>{ENEMY_NAMES[k]}</b><span>生命 {ENEMY_DEFS[k].hp} · 速度 {ENEMY_DEFS[k].speedCellsPerSecond}{ENEMY_DEFS[k].physicalResistance ? ` · 物抗 ${ENEMY_DEFS[k].physicalResistance * 100}%` : ''}</span></div>
+            <div key={k} className="help-enemy"><EnemyIcon kind={k} size={26} /><b>{ENEMY_NAMES[k]}</b><span>生命 {ENEMY_DEFS[k].hp} · 速度 {ENEMY_DEFS[k].speedCellsPerSecond}{ENEMY_DEFS[k].physicalResistance ? ` · 物抗 ${Math.round(ENEMY_DEFS[k].physicalResistance * 100)}%` : ''}{ENEMY_TRAIT[k] ? ` · ${ENEMY_TRAIT[k]}` : ''}</span></div>
           ))}
         </div>
       </div>

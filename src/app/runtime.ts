@@ -52,7 +52,7 @@ function playAudio(events: GameEvent[], state: GameState) {
         break;
       }
       case 'CANNON_EXPLODED': id = 'explosion'; break;
-      case 'ENEMY_KILLED': id = e.kind === 'golem' ? 'deathGolem' : e.kind === 'runner' ? 'deathRunner' : 'deathSlime'; break;
+      case 'ENEMY_KILLED': id = e.kind === 'golem' || e.kind === 'knight' || e.kind === 'boss' ? 'deathGolem' : e.kind === 'runner' || e.kind === 'wisp' ? 'deathRunner' : 'deathSlime'; break;
       case 'CORE_DAMAGED': id = 'coreHit'; break;
       case 'TERRAIN_CHANGED': id = e.to > e.from ? 'raise' : 'lower'; break;
       case 'WALL_PLACED': id = 'wallPlace'; break;

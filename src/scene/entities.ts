@@ -126,12 +126,14 @@ export class EnemyView {
   constructor(readonly id: string, readonly kind: EnemyKind, readonly laneOffset: number) {
     const g = enemyGeometry(kind);
     this.height = g.height;
-    this.mat = createVoxelMaterial({ bevel: 0.012, transparent: kind === 'slime', opacity: kind === 'slime' ? 0.9 : 1, roughness: kind === 'slime' ? 0.35 : 0.85 });
+    const jelly = kind === 'slime' || kind === 'mini' || kind === 'splitter';
+    this.mat = createVoxelMaterial({ bevel: 0.012, transparent: jelly, opacity: jelly ? 0.9 : 1, roughness: jelly ? 0.35 : kind === 'knight' ? 0.45 : 0.85 });
     this.body = new Mesh(g.body, this.mat);
     this.body.castShadow = true;
     this.group.add(this.body);
     if (g.extra) {
-      const extraMat = kind === 'golem' ? createVoxelMaterial({ emissiveStrength: 3 }) : this.mat;
+      const glowing = kind === 'golem' || kind === 'boss' || kind === 'wisp' || kind === 'splitter';
+      const extraMat = glowing ? createVoxelMaterial({ emissiveStrength: kind === 'splitter' ? 1.4 : 3 }) : this.mat;
       this.extra = new Mesh(g.extra, extraMat);
       this.extra.castShadow = true;
       if (kind === 'runner') this.extra.position.set(0, 0.36, -0.42);
@@ -147,11 +149,21 @@ export class EnemyView {
     const tint = this.mat.userData.uniforms.uTint.value;
     if (this.slowed) tint.set(0.62, 0.86, 1.0, 0.42); else tint.set(1, 1, 1, 0);
     const s = this.squash;
-    if (this.kind === 'slime') {
+    if (this.kind === 'slime' || this.kind === 'mini' || this.kind === 'splitter') {
       const hop = moving ? Math.abs(Math.sin(this.t * 6.5)) : 0;
       const sq = 1 + Math.sin(this.t * 13) * 0.12 * (moving ? 1 : 0.3) + s * 0.2;
       this.body.scale.set(1 / Math.sqrt(sq), sq, 1 / Math.sqrt(sq));
       this.body.position.y = hop * 0.12;
+      if (this.extra) { this.extra.scale.copy(this.body.scale); this.extra.position.y = this.body.position.y; }
+    } else if (this.kind === 'wisp') {
+      const bob = Math.sin(this.t * 3) * 0.08;
+      this.body.position.y = 0.18 + bob;
+      this.body.rotation.z = Math.sin(this.t * 14) * 0.08;
+      if (this.extra) { this.extra.position.y = 0.18 + bob; const p = 1 + Math.sin(this.t * 5) * 0.06 + s * 0.15; this.extra.scale.setScalar(p); }
+    } else if (this.kind === 'knight') {
+      this.body.position.y = Math.abs(Math.sin(this.t * 9)) * 0.02;
+      this.body.rotation.z = Math.sin(this.t * 9) * 0.03;
+      this.body.scale.set(1 + s * 0.04, 1 - s * 0.04, 1 + s * 0.04);
     } else if (this.kind === 'runner') {
       this.body.position.y = Math.abs(Math.sin(this.t * 12)) * 0.05;
       this.body.rotation.x = 0.12 + Math.sin(this.t * 12) * 0.04 - s * 0.3;

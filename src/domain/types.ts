@@ -53,7 +53,8 @@ export interface CoreDef {
 }
 
 export type TowerKind = 'arrow' | 'frost' | 'cannon';
-export type EnemyKind = 'slime' | 'runner' | 'golem';
+export type EnemyKind = 'slime' | 'runner' | 'golem' | 'mini' | 'splitter' | 'knight' | 'wisp' | 'boss';
+export const ENEMY_KINDS: readonly EnemyKind[] = ['slime', 'runner', 'golem', 'mini', 'splitter', 'knight', 'wisp', 'boss'];
 
 export interface SpawnEntry {
   enemyKind: EnemyKind;
@@ -61,12 +62,16 @@ export interface SpawnEntry {
   /** Round-robin in list order: i-th enemy → portalIds[i % length] (D21-07). */
   portalIds: string[];
   intervalTicks: number;
+  /** Pause (ticks) on each of this entry's portals before its first spawn. Default 0. */
+  delayTicks?: number;
 }
 
 export interface WaveDef {
   id: string;
   entries: SpawnEntry[];
   clearGold: number;
+  /** Multiplier on every spawned enemy's max HP (later waves are tougher). Default 1. */
+  hpScale?: number;
 }
 
 /** Decorative-only data for the renderer (never used by navigation/LOS). */
@@ -118,6 +123,14 @@ export interface EnemyDef {
   goldReward: number;
   physicalResistance: number;
   targetOffsetWorld: number;
+  /** 0..1 — fraction of frost slow ignored (bosses shrug off most of it). */
+  slowResistance?: number;
+  /** On death, spawns `count` enemies of `kind` at the same spot on the route. */
+  splitInto?: { kind: EnemyKind; count: number };
+  /** Every `everyTicks`, restores `amount` HP (× the wave's hpScale) to other enemies within `radiusWorld`. */
+  healAura?: { radiusWorld: number; amount: number; everyTicks: number };
+  /** Presentation hint: model scale + HP bar width. */
+  scale?: number;
 }
 
 export type GamePhase = 'MENU' | 'PREPARE' | 'COMBAT' | 'WAVE_RESULT' | 'VICTORY' | 'DEFEAT';
@@ -144,6 +157,8 @@ export interface EnemyInstance {
   kind: EnemyKind;
   portalId: string;
   hp: number;
+  /** Max HP at spawn (base HP × the wave's hpScale). */
+  maxHp: number;
   state: 'moving' | 'dead' | 'reachedCore';
   pathNodeIds: CellId[];
   edgeIndex: number;
@@ -199,7 +214,7 @@ export type RejectionCode =
   | 'PROTECTED_CONNECTOR' | 'INSUFFICIENT_GOLD'
   | 'NO_ROUTE_FROM_PORTAL' | 'ROUTE_TOO_LONG'
   | 'NOT_FOUND' | 'INVALID_LEVEL_DATA'
-  | 'NOTHING_TO_UNDO' | 'MAX_LEVEL';
+  | 'NOTHING_TO_UNDO' | 'MAX_LEVEL' | 'ON_ACTIVE_ROUTE';
 
 export type CommandResult =
   | { ok: true; state: GameState; events: GameEvent[]; cost: number }
@@ -223,6 +238,7 @@ export type GameEvent =
   | { type: 'ENEMY_DAMAGED'; tick: number; enemyId: string; sourceTowerId: string;
       amount: number; damageType: 'physical' | 'magic'; resisted: boolean; hpAfter: number }
   | { type: 'ENEMY_SLOWED'; tick: number; enemyId: string; untilTick: number }
+  | { type: 'ENEMY_HEALED'; tick: number; enemyId: string; sourceEnemyId: string; amount: number; hpAfter: number }
   | { type: 'CANNON_EXPLODED'; tick: number; towerId: string; at: Vec3; hitIds: string[] }
   | { type: 'ENEMY_KILLED'; tick: number; enemyId: string; kind: EnemyKind; killerTowerId: string; gold: number }
   | { type: 'ENEMY_REACHED_CORE'; tick: number; enemyId: string; kind: EnemyKind;
@@ -242,7 +258,7 @@ export type GameEventType = GameEvent['type'];
 
 export const ALL_EVENT_TYPES: readonly GameEventType[] = [
   'PHASE_CHANGED', 'WAVE_STARTED', 'WAVE_CLEARED', 'ENEMY_SPAWNED', 'TOWER_FIRED',
-  'TOWER_BLOCKED', 'ENEMY_DAMAGED', 'ENEMY_SLOWED', 'CANNON_EXPLODED', 'ENEMY_KILLED',
+  'TOWER_BLOCKED', 'ENEMY_DAMAGED', 'ENEMY_SLOWED', 'ENEMY_HEALED', 'CANNON_EXPLODED', 'ENEMY_KILLED',
   'ENEMY_REACHED_CORE', 'CORE_DAMAGED', 'GOLD_CHANGED', 'TERRAIN_CHANGED', 'WALL_PLACED',
   'WALL_REMOVED', 'TOWER_BUILT', 'TOWER_UPGRADED', 'TOWER_SOLD', 'ROUTES_CHANGED',
   'UNDO_APPLIED', 'VICTORY', 'DEFEAT',

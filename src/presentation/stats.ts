@@ -81,6 +81,12 @@ export function analyseFailure(ctx: FailureContext): string {
     const place = [...places.entries()].sort((a, b) => b[1] - a[1])[0]![0];
     return `${ctx.portalName(portalId)} 漏了 ${count} 隻：${place}有 ${best.len} 格路線沒有任何火力覆蓋。`;
   }
+  const bosses = ctx.stats.leakKinds.boss ?? 0;
+  if (bosses > 0) return `${ctx.portalName(portalId)} 的岩王巨像突破了防線：牠不怕緩速，集中升級到 3 級的塔並在路線上多鋪火力。`;
+  const knights = ctx.stats.leakKinds.knight ?? 0;
+  if (knights >= Math.max(1, count / 2)) return `${ctx.portalName(portalId)} 漏了 ${count} 隻，多數是鐵甲甲蟲：物理傷害減半，多蓋冰晶塔用魔法攻擊。`;
+  const minis = (ctx.stats.leakKinds.mini ?? 0) + (ctx.stats.leakKinds.splitter ?? 0);
+  if (minis >= Math.max(2, count / 2)) return `${ctx.portalName(portalId)} 漏了 ${count} 隻，多數是成群的小果凍：砲塔的範圍爆炸最適合清場。`;
   const golems = ctx.stats.leakKinds.golem ?? 0;
   if (golems >= Math.max(1, count / 2)) return `${ctx.portalName(portalId)} 漏了 ${count} 隻，多數是石殼巨人：物理減傷 20%，試試冰晶塔減速或升級砲塔。`;
   return `${ctx.portalName(portalId)} 漏了 ${count} 隻：路線雖有覆蓋但火力不足，升級塔或用地形讓敵人多繞一段。`;

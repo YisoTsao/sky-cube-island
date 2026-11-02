@@ -2,7 +2,8 @@ import {
   Group, InstancedMesh, Mesh, MeshBasicMaterial, Object3D, PlaneGeometry, Raycaster, Scene, Vector2, Vector3,
   Color, CanvasTexture, Sprite, SpriteMaterial, type BufferGeometry,
 } from 'three';
-import type { CellId, EnemyInstance, GameEvent, GameState, LevelDef } from '../domain/types';
+import type { CellId, EnemyInstance, EnemyKind, GameEvent, GameState, LevelDef } from '../domain/types';
+import { ENEMY_DEFS } from '../domain/definitions';
 import { HEIGHT_STEP_WORLD } from '../domain/types';
 import type { PreviewInfo, RangeCell, SceneFeed } from '../presentation/feed';
 import { RenderPipeline, QUALITY, type QualityLevel } from './render/pipeline';
@@ -36,6 +37,11 @@ const ENEMY_SHARDS: Record<string, PaletteKey[]> = {
   slime: ['slime', 'slimeLight', 'slimeDark'],
   runner: ['runner', 'runnerLight', 'runnerDark'],
   golem: ['golem', 'golemDark', 'golemMoss'],
+  mini: ['jelly', 'jellyLight', 'jellyDark'],
+  splitter: ['splitter', 'splitterLight', 'splitterDark'],
+  knight: ['knight', 'knightDark', 'knightLight', 'ironLight'],
+  wisp: ['wisp', 'wispDeep', 'wispLeaf'],
+  boss: ['boss', 'bossDark', 'gold', 'bossLava'],
 };
 const TOWER_SHARDS: Record<string, PaletteKey[]> = {
   arrow: ['wood', 'woodDark', 'plank', 'rock'],
@@ -526,7 +532,7 @@ export class SceneApp {
           this.queue(delay, () => {
             const v = this.enemies.get(id);
             const at = v ? v.group.position.clone() : pos;
-            if (v) { v.hit(); v.hpRatio = hpAfter / this.maxHp(kind); }
+            if (v) { v.hit(); v.hpRatio = hpAfter / (enemy?.maxHp ?? this.maxHp(kind)); }
             if (!at) return;
             const top = at.clone().add(new Vector3(0, (v?.height ?? 0.6) + 0.15, 0));
             if (this.opts.damageNumbers) this.overlay.spawnNumber(top, amount, resisted ? 0xd8dde8 : 0xffe28a, resisted ? 0.85 : 1);
@@ -541,6 +547,11 @@ export class SceneApp {
             const v = this.enemies.get(id);
             if (v) this.vfx.sparks(v.group.position.clone().add(new Vector3(0, 0.4, 0)), 'crystalLight', 10, { speed: 0.9, up: 1 });
           });
+          break;
+        }
+        case 'ENEMY_HEALED': {
+          const v = this.enemies.get(e.enemyId);
+          if (v && !reduced) this.vfx.sparks(v.group.position.clone().add(new Vector3(0, v.height * 0.7, 0)), 'wisp', 5, { speed: 0.6, up: 1.4 });
           break;
         }
         case 'CANNON_EXPLODED': {
@@ -564,7 +575,8 @@ export class SceneApp {
             const v = this.enemies.get(id);
             if (v) {
               const p = v.group.position.clone().add(new Vector3(0, v.height * 0.5, 0));
-              this.vfx.shatter(p, ENEMY_SHARDS[kind]!, kind === 'golem' ? 34 : 22, { speed: kind === 'runner' ? 3 : 2.2, up: 2.8 });
+              this.vfx.shatter(p, ENEMY_SHARDS[kind]!, kind === 'boss' ? 80 : kind === 'golem' ? 34 : kind === 'mini' ? 10 : 22, { speed: kind === 'runner' ? 3 : 2.2, up: 2.8 });
+              if (kind === 'boss') this.rig.addTrauma(0.4);
               this.vfx.sparks(p, 'gold', 6, { speed: 1.2, up: 2 });
               this.hooks.onCoins?.(this.screenOf(p), gold);
               this.scene.remove(v.group);
@@ -608,7 +620,7 @@ export class SceneApp {
     if (routesChanged) this.refreshRoutes(true);
   }
 
-  private maxHp(kind?: string) { return kind === 'golem' ? 190 : kind === 'runner' ? 42 : 60; }
+  private maxHp(kind?: EnemyKind) { return kind ? ENEMY_DEFS[kind].hp : 60; }
   private travelDelay(towerId: string, s: GameState): number {
     const t = s.towers.find((x) => x.id === towerId);
     const ticks = t?.kind === 'cannon' ? 8 : t?.kind === 'frost' ? 5 : 4;
@@ -699,9 +711,10 @@ export class SceneApp {
       df = Math.atan2(Math.sin(df), Math.cos(df));
       v.group.rotation.y += df * Math.min(1, dt * 10 + 0.05);
       v.slowed = e.slowUntilTick > s.tick;
-      v.hpRatio = e.hp / this.maxHp(e.kind);
+      const maxHp = e.maxHp ?? this.maxHp(e.kind);
+      v.hpRatio = e.hp / maxHp;
       v.update(dt, true, v.slowed ? 0.7 : 1);
-      if (e.hp < this.maxHp(e.kind)) bars.push({ pos: pos.clone().add(new Vector3(0, v.height + 0.3, 0)), ratio: v.hpRatio, slowed: v.slowed, width: e.kind === 'golem' ? 1.25 : 1 });
+      if (e.hp < maxHp) bars.push({ pos: pos.clone().add(new Vector3(0, v.height + 0.3, 0)), ratio: v.hpRatio, slowed: v.slowed, width: e.kind === 'boss' ? 2 : e.kind === 'golem' ? 1.25 : e.kind === 'mini' ? 0.7 : 1 });
     }
     for (const [id, v] of this.enemies) {
       if (live.has(id)) continue;

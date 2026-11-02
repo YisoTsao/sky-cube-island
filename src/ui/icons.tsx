@@ -30,9 +30,22 @@ export function TowerIcon({ kind, size = 40 }: { kind: TowerKind; size?: number 
   );
 }
 
+const blob = (size: number, fill: string, stroke: string, extra?: ReactElement) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden><path d="M3 19c0-8 4-14 9-14s9 6 9 14Z" fill={fill} stroke={stroke} strokeWidth="1.5" />{extra}<rect x="8" y="11" width="2.4" height="3" fill="#1d2333" /><rect x="13.6" y="11" width="2.4" height="3" fill="#1d2333" /></svg>
+);
+
 export function EnemyIcon({ kind, size = 22 }: { kind: EnemyKind; size?: number }): ReactElement {
-  if (kind === 'slime') return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden><path d="M3 19c0-8 4-14 9-14s9 6 9 14Z" fill="#72dc5a" stroke="#46b13e" strokeWidth="1.5" /><rect x="8" y="11" width="2.4" height="3" fill="#1d2333" /><rect x="13.6" y="11" width="2.4" height="3" fill="#1d2333" /></svg>
+  if (kind === 'slime') return blob(size, '#72dc5a', '#46b13e');
+  if (kind === 'mini') return blob(Math.round(size * 0.8), '#ff8fc8', '#e0609e');
+  if (kind === 'splitter') return blob(size, '#b07aff', '#7f4fd6', <><circle cx="8" cy="16" r="1.6" fill="#ff8fc8" /><circle cx="12" cy="17" r="1.6" fill="#ff8fc8" /><circle cx="16" cy="16" r="1.6" fill="#ff8fc8" /></>);
+  if (kind === 'knight') return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden><path d="M3 18c0-6 4-11 9-11s9 5 9 11Z" fill="#5a6fa0" stroke="#3b4a72" strokeWidth="1.5" /><path d="M12 7v11" stroke="#3b4a72" strokeWidth="1.4" /><path d="M11 7l1-5 1 5" fill="#8a8f9b" stroke="#5b5f6a" strokeWidth="1" /><rect x="7" y="18" width="2" height="3" fill="#3b4a72" /><rect x="15" y="18" width="2" height="3" fill="#3b4a72" /><circle cx="9" cy="12" r="1" fill="#ffa040" /><circle cx="15" cy="12" r="1" fill="#ffa040" /></svg>
+  );
+  if (kind === 'wisp') return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden><path d="M2 11c3-3 5-3 6 0M22 11c-3-3-5-3-6 0" fill="#6fd36a" stroke="#3fd07a" strokeWidth="1.4" /><circle cx="12" cy="12" r="6" fill="#9cffb0" stroke="#3fd07a" strokeWidth="1.5" /><circle cx="12" cy="12" r="3" fill="#fff" /><path d="M12 9.5v5M9.5 12h5" stroke="#3fd07a" strokeWidth="1.6" /></svg>
+  );
+  if (kind === 'boss') return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden><rect x="2" y="7" width="20" height="13" rx="2" fill="#6d6670" stroke="#4a444f" strokeWidth="1.5" /><path d="M4 7 6 2l3 4 3-5 3 5 3-4 2 5Z" fill="#f2c14e" stroke="#c9932f" strokeWidth="1" strokeLinejoin="round" /><rect x="7" y="11" width="3" height="2" fill="#ff6a2a" /><rect x="14" y="11" width="3" height="2" fill="#ff6a2a" /><path d="M8 16h8" stroke="#ff6a2a" strokeWidth="1.5" /></svg>
   );
   if (kind === 'runner') return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden><path d="M2 14 7 9h9l5 3-2 3h-3l-1 5h-2l-1-4H9l-2 4H5l1-5Z" fill="#ff9a3c" stroke="#d8691f" strokeWidth="1.2" strokeLinejoin="round" /><circle cx="17.5" cy="11.5" r="1" fill="#1d2333" /></svg>

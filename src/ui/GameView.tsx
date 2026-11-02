@@ -38,7 +38,10 @@ export function issue(cmd: GameCommand, cells: CellId[] = []): boolean {
 
 export function setTool(tool: Tool) {
   const ui = useUi.getState();
-  if (ui.phase !== 'PREPARE' && tool.type !== 'none') { ui.toast('只能在準備階段建造或改造地形', 'error'); return; }
+  if (tool.type !== 'none' && !toolAllowed(ui.phase, tool)) {
+    ui.toast(ui.phase === 'COMBAT' ? '戰鬥中只能建造、升級或出售防禦塔' : '只能在準備階段建造或改造地形', 'error');
+    return;
+  }
   const same = ui.tool.type === tool.type && (tool.type !== 'build' || (ui.tool.type === 'build' && ui.tool.kind === tool.kind));
   const next = same ? { type: 'none' as const } : tool;
   ui.set({ tool: next, preview: null, selection: next.type === 'none' ? ui.selection : null });
@@ -49,9 +52,15 @@ export function setTool(tool: Tool) {
   if (next.type !== 'none' && hover) refreshPreview(hover);
 }
 
+/** Terrain and walls are PREPARE-only; towers can also be built during COMBAT. */
+export function toolAllowed(phase: string, tool: Tool): boolean {
+  if (phase === 'PREPARE') return true;
+  return phase === 'COMBAT' && tool.type === 'build';
+}
+
 function refreshPreview(cellId: CellId | null) {
   const ui = useUi.getState();
-  const p = ui.phase === 'PREPARE' ? controller.preview(ui.tool, cellId) : null;
+  const p = toolAllowed(ui.phase, ui.tool) ? controller.preview(ui.tool, cellId) : null;
   ui.set({ preview: p });
   runtime.scene?.setPreview(p);
 }
@@ -186,7 +195,7 @@ export function GameView() {
     const primaryAt = (x: number, y: number, touch: boolean) => {
       const u = useUi.getState();
       const hit = scene.pick(x, y);
-      if (u.tool.type !== 'none' && u.phase === 'PREPARE') {
+      if (u.tool.type !== 'none' && toolAllowed(u.phase, u.tool)) {
         let cellId = hit.cellId;
         if (touch && pendingTouchCell && cellId !== pendingTouchCell) {
           // fingers are imprecise on small tiles: a confirm tap anywhere on the previewed footprint,
@@ -281,7 +290,14 @@ export function GameView() {
     };
     const onCancel = (ev: PointerEvent) => { if (isTouch(ev)) gestures.cancel(ev.pointerId); else dragging = null; };
     // a new tool (or none) invalidates a half-confirmed touch placement
-    const unsubTool = useUi.subscribe((s, prev) => { if (s.tool !== prev.tool) pendingTouchCell = null; });
+    const unsubTool = useUi.subscribe((s, prev) => {
+      if (s.tool !== prev.tool) pendingTouchCell = null;
+      // a tool that the new phase does not allow (e.g. a tower tool when the wave ends) is dropped
+      if (s.phase !== prev.phase && s.tool.type !== 'none' && !toolAllowed(s.phase, s.tool)) {
+        s.set({ tool: { type: 'none' }, preview: null });
+        scene.setPreview(null);
+      }
+    });
     const onWheel = (ev: WheelEvent) => { ev.preventDefault(); scene.rig.zoomBy(ev.deltaY); };
     const onContext = (ev: Event) => ev.preventDefault();
 
@@ -316,10 +332,10 @@ export function GameView() {
         if (u.tool.type !== 'none' || u.preview) { u.set({ tool: { type: 'none' }, preview: null }); scene.setPreview(null); }
         else if (u.selection) { u.set({ selection: null }); scene.setSelection(null); }
         else { const open = !u.pauseOpen; u.set({ pauseOpen: open }); if (u.phase === 'COMBAT') { controller.flags.paused = open; syncStore(); } }
-      } else if (k === 'x' && u.selection?.type === 'tower' && u.phase === 'PREPARE') {
+      } else if (k === 'x' && u.selection?.type === 'tower' && (u.phase === 'PREPARE' || u.phase === 'COMBAT')) {
         issue({ type: 'SELL_TOWER', towerId: u.selection.id });
         u.set({ selection: null }); scene.setSelection(null);
-      } else if (k === 'u' && u.selection?.type === 'tower' && u.phase === 'PREPARE') {
+      } else if (k === 'u' && u.selection?.type === 'tower' && (u.phase === 'PREPARE' || u.phase === 'COMBAT')) {
         issue({ type: 'UPGRADE_TOWER', towerId: u.selection.id });
       }
     };

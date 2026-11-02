@@ -12,7 +12,7 @@ describe('Edit commands (Tech §6, §12.2)', () => {
     const r = run(fresh(), { type: 'BUILD_TOWER', kind: 'arrow', anchorCellId: cid(14, 11) });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.state.gold).toBe(150);
+    expect(r.state.gold).toBe(level.initialGold - 70);
     expect(r.state.towers[0]!.footprintCellIds).toHaveLength(4);
   });
   it('rejects a footprint across two heights', () => {
@@ -39,7 +39,7 @@ describe('Edit commands (Tech §6, §12.2)', () => {
     if (!r1.ok) return;
     const r2 = run(r1.state, { type: 'SET_ELEVATION', cellId: cid(6, 12), next: 2 });
     expect(r2.ok).toBe(true);
-    if (r2.ok) expect(r2.state.gold).toBe(220 - 24);
+    if (r2.ok) expect(r2.state.gold).toBe(level.initialGold - 24);
   });
   it('rejects blocking every route with zero side effects', () => {
     // Test-only clone: make the ring around Portal A editable, then try to wall it in completely.
@@ -79,7 +79,7 @@ describe('Edit commands (Tech §6, §12.2)', () => {
     const id = s.towers[0]!.id;
     const u1 = run(s, { type: 'UPGRADE_TOWER', towerId: id });
     if (!u1.ok) throw new Error('up');
-    expect(u1.state.gold).toBe(220 - 105 - 74);
+    expect(u1.state.gold).toBe(level.initialGold - 105 - 74);
     const sell = run(u1.state, { type: 'SELL_TOWER', towerId: id });
     if (!sell.ok) throw new Error('sell');
     expect(sell.state.gold).toBe(u1.state.gold + Math.floor((105 + 74) * 0.65));
@@ -89,7 +89,7 @@ describe('Edit commands (Tech §6, §12.2)', () => {
     const p = run(fresh(), { type: 'PLACE_WALL', cellId: cid(6, 12) });
     if (!p.ok) throw new Error();
     const r = run(p.state, { type: 'REMOVE_WALL', wallId: p.state.walls[0]!.id });
-    expect(r.ok && r.state.gold).toBe(220 - 15 + 7);
+    expect(r.ok && r.state.gold).toBe(level.initialGold - 15 + 7);
   });
   it('commands are rejected outside PREPARE', () => {
     const s: GameState = { ...fresh(), phase: 'COMBAT' };
