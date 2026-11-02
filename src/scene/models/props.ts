@@ -1,27 +1,73 @@
 import type { BufferGeometry } from 'three';
 import type { EnemyKind } from '../../domain/types';
+import { ENEMY_DEFS } from '../../domain/definitions';
+import type { PaletteKey } from '../palette';
 import { VoxelModel } from '../voxel/model';
 import { FLAG_EMISSIVE } from '../materials/voxel-material';
 
 const V = 1 / 16;
 
+type Shade = [PaletteKey, PaletteKey, PaletteKey];
+
+function slimeModel([body, light, dark]: Shade, scale: number, cores = false): { body: BufferGeometry; extra?: BufferGeometry; height: number } {
+  const m = new VoxelModel(14, 11, 14);
+  for (let y = 0; y < 10; y++) {
+    const t = y / 9;
+    const r = 6.6 * Math.sqrt(Math.max(0, 1 - Math.pow(Math.max(0, t - 0.25) / 0.75, 2))) + (y < 2 ? 0.2 : 0);
+    m.cylinder(7, 7, r, y, y, y < 2 ? dark : y > 7 ? light : body);
+  }
+  // eyes + mouth on +z face
+  m.box(4, 5, 12, 5, 7, 13, 'eye'); m.box(9, 5, 12, 10, 7, 13, 'eye');
+  m.set(4, 7, 12, 'white'); m.set(9, 7, 12, 'white');
+  m.box(6, 3, 13, 8, 3, 13, dark);
+  // highlight
+  m.box(3, 8, 5, 4, 8, 6, 'white');
+  let extra: BufferGeometry | undefined;
+  if (cores) {
+    // three little jellies visible inside the splitter's body
+    const c = new VoxelModel(14, 11, 14);
+    c.sphere(5, 4, 6, 1.6, 'jelly'); c.sphere(9, 4, 6, 1.6, 'jelly'); c.sphere(7, 6.5, 5, 1.6, 'jellyLight');
+    extra = c.build(V * scale, { flags: FLAG_EMISSIVE });
+  }
+  return { body: m.build(V * scale), extra, height: 0.62 * scale };
+}
+
+function golemModel(scale: number, boss: boolean): { body: BufferGeometry; extra?: BufferGeometry; height: number } {
+  const [stone, dark, moss]: Shade = boss ? ['boss', 'bossDark', 'bossDark'] : ['golem', 'golemDark', 'golemMoss'];
+  const m = new VoxelModel(18, 19, 16);
+  // legs
+  m.box(3, 0, 5, 6, 4, 10, dark); m.box(11, 0, 5, 14, 4, 10, dark);
+  // torso
+  m.box(1, 4, 3, 16, 12, 13, stone, true);
+  m.box(2, 12, 4, 15, 13, 12, stone, true);
+  // moss back + shoulders
+  m.box(1, 9, 3, 16, 14, 6, moss, true);
+  m.box(0, 9, 4, 1, 12, 11, moss); m.box(16, 9, 4, 17, 12, 11, moss);
+  // arms
+  m.box(0, 3, 6, 1, 9, 10, dark); m.box(16, 3, 6, 17, 9, 10, dark);
+  // face
+  m.box(4, 8, 13, 13, 11, 14, dark);
+  if (boss) {
+    // crown of gold spikes
+    m.box(3, 14, 5, 14, 14, 11, 'goldDark');
+    for (const x of [3, 6, 9, 12, 14]) m.box(x, 15, 7, x, 17 + (x === 9 ? 1 : 0), 8, 'gold');
+  }
+  const eyes = new VoxelModel(18, 19, 16);
+  const eye: PaletteKey = boss ? 'bossLava' : 'golemEye';
+  eyes.box(5, 9, 14, 6, 10, 14, eye); eyes.box(11, 9, 14, 12, 10, 14, eye);
+  if (boss) {
+    // molten cracks across the chest
+    eyes.box(5, 6, 14, 12, 6, 14, 'bossLava'); eyes.box(8, 5, 14, 9, 7, 14, 'bossLava');
+  }
+  return { body: m.build(V * scale), extra: eyes.build(V * scale, { flags: FLAG_EMISSIVE }), height: 0.9 * scale };
+}
+
 /** Enemies (GDD §8.1): distinct silhouette, hue and gait. Forward = +z. */
 export function enemyGeometry(kind: EnemyKind): { body: BufferGeometry; extra?: BufferGeometry; height: number } {
-  if (kind === 'slime') {
-    const m = new VoxelModel(14, 11, 14);
-    for (let y = 0; y < 10; y++) {
-      const t = y / 9;
-      const r = 6.6 * Math.sqrt(Math.max(0, 1 - Math.pow(Math.max(0, t - 0.25) / 0.75, 2))) + (y < 2 ? 0.2 : 0);
-      m.cylinder(7, 7, r, y, y, y < 2 ? 'slimeDark' : y > 7 ? 'slimeLight' : 'slime');
-    }
-    // eyes + mouth on +z face
-    m.box(4, 5, 12, 5, 7, 13, 'eye'); m.box(9, 5, 12, 10, 7, 13, 'eye');
-    m.set(4, 7, 12, 'white'); m.set(9, 7, 12, 'white');
-    m.box(6, 3, 13, 8, 3, 13, 'slimeDark');
-    // highlight
-    m.box(3, 8, 5, 4, 8, 6, 'white');
-    return { body: m.build(V), height: 0.62 };
-  }
+  const scale = ENEMY_DEFS[kind].scale ?? 1;
+  if (kind === 'slime') return slimeModel(['slime', 'slimeLight', 'slimeDark'], scale);
+  if (kind === 'mini') return slimeModel(['jelly', 'jellyLight', 'jellyDark'], scale);
+  if (kind === 'splitter') return slimeModel(['splitter', 'splitterLight', 'splitterDark'], scale, true);
   if (kind === 'runner') {
     const m = new VoxelModel(12, 13, 20);
     // legs
@@ -41,22 +87,41 @@ export function enemyGeometry(kind: EnemyKind): { body: BufferGeometry; extra?: 
     tail.box(1, 2, 6, 4, 4, 9, 'runnerLight');
     return { body: m.build(V), extra: tail.build(V, { originY: -2 * V }), height: 0.75 };
   }
-  const m = new VoxelModel(18, 16, 16);
-  // legs
-  m.box(3, 0, 5, 6, 4, 10, 'golemDark'); m.box(11, 0, 5, 14, 4, 10, 'golemDark');
-  // torso
-  m.box(1, 4, 3, 16, 12, 13, 'golem', true);
-  m.box(2, 12, 4, 15, 13, 12, 'golem', true);
-  // moss back + shoulders
-  m.box(1, 9, 3, 16, 14, 6, 'golemMoss', true);
-  m.box(0, 9, 4, 1, 12, 11, 'golemMoss'); m.box(16, 9, 4, 17, 12, 11, 'golemMoss');
-  // arms
-  m.box(0, 3, 6, 1, 9, 10, 'golemDark'); m.box(16, 3, 6, 17, 9, 10, 'golemDark');
-  // face
-  m.box(4, 8, 13, 13, 11, 14, 'golemDark');
-  const eyes = new VoxelModel(18, 16, 16);
-  eyes.box(5, 9, 14, 6, 10, 14, 'golemEye'); eyes.box(11, 9, 14, 12, 10, 14, 'golemEye');
-  return { body: m.build(V), extra: eyes.build(V, { flags: FLAG_EMISSIVE }), height: 0.9 };
+  if (kind === 'knight') {
+    // armoured beetle: low domed shell plates, six legs, horn
+    const m = new VoxelModel(16, 12, 20);
+    for (const z of [5, 9, 13]) { m.box(1, 0, z, 2, 3, z, 'knightDark'); m.box(13, 0, z, 14, 3, z, 'knightDark'); }
+    for (let y = 2; y < 10; y++) {
+      const t = (y - 2) / 7;
+      const r = 6.8 * Math.sqrt(Math.max(0, 1 - t * t));
+      for (let z = 3; z <= 15; z++) {
+        const zz = (z - 9) / 7;
+        const rr = r * Math.sqrt(Math.max(0, 1 - zz * zz * 0.5));
+        for (let x = 0; x < 16; x++) {
+          const dx = x + 0.5 - 7.5;
+          if (Math.abs(dx) <= rr) m.set(x, y, z, Math.abs(dx) < 0.6 ? 'knightDark' : y > 7 ? 'knightLight' : 'knight', true);
+        }
+      }
+    }
+    // head + horn
+    m.box(5, 3, 16, 10, 6, 18, 'knightDark');
+    m.box(7, 6, 18, 8, 9, 19, 'ironLight'); m.box(7, 9, 17, 8, 10, 18, 'ironLight');
+    m.set(5, 5, 18, 'golemEye'); m.set(10, 5, 18, 'golemEye');
+    return { body: m.build(V), height: 0.68 };
+  }
+  if (kind === 'wisp') {
+    // floating healing orb with leaf wings (body hovers; orb glows)
+    const orb = new VoxelModel(14, 14, 14);
+    orb.sphere(7, 7, 7, 4.2, 'wisp');
+    orb.sphere(7, 7, 7, 2.6, 'white');
+    const m = new VoxelModel(22, 14, 14);
+    m.box(1, 7, 6, 6, 8, 8, 'wispLeaf'); m.box(2, 9, 6, 5, 9, 8, 'wispDeep');
+    m.box(16, 7, 6, 21, 8, 8, 'wispLeaf'); m.box(17, 9, 6, 20, 9, 8, 'wispDeep');
+    m.box(10, 1, 7, 11, 3, 7, 'wispDeep');
+    m.box(9, 8, 11, 9, 9, 12, 'eye'); m.box(12, 8, 11, 12, 9, 12, 'eye');
+    return { body: m.build(V, { originY: 2 * V }), extra: orb.build(V, { originY: 2 * V, flags: FLAG_EMISSIVE }), height: 0.95 };
+  }
+  return golemModel(scale, kind === 'boss');
 }
 
 /** Wooden barricade with stone footing (路障, 1×1 cell). */

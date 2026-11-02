@@ -77,6 +77,9 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
   let spawnCursor = state.spawnCursor;
   const enemies: EnemyInstance[] = state.enemies.map((e) => ({ ...e }));
 
+  const hpScale = level.waves[state.currentWaveIndex]?.hpScale ?? 1;
+  const spawnHp = (kind: EnemyInstance['kind']) => Math.max(1, Math.round(ENEMY_DEFS[kind].hp * hpScale));
+
   // 1. Spawn
   while (spawnCursor < state.spawnQueue.length && state.spawnQueue[spawnCursor]!.tick <= state.waveTick) {
     const item = state.spawnQueue[spawnCursor++]!;
@@ -84,7 +87,7 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
     if (!path || path.length === 0) continue;
     const enemy: EnemyInstance = {
       id: `e${nextEntityId++}`, kind: item.enemyKind, portalId: item.portalId,
-      hp: ENEMY_DEFS[item.enemyKind].hp, state: 'moving', pathNodeIds: path,
+      hp: spawnHp(item.enemyKind), maxHp: spawnHp(item.enemyKind), state: 'moving', pathNodeIds: path,
       edgeIndex: 0, segmentProgress: 0, slowUntilTick: -1, spawnTick: tick,
     };
     enemies.push(enemy);
@@ -95,7 +98,7 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
   for (const e of enemies) {
     if (e.state !== 'moving') continue;
     const def = ENEMY_DEFS[e.kind];
-    const slowRatio = e.slowUntilTick > tick ? (TOWER_DEFS.frost.slow?.ratio ?? 0) : 0;
+    const slowRatio = e.slowUntilTick > tick ? (TOWER_DEFS.frost.slow?.ratio ?? 0) * (1 - (def.slowResistance ?? 0)) : 0;
     e.segmentProgress += (def.speedCellsPerSecond * (1 - slowRatio)) / TPS;
     while (e.segmentProgress >= 1 && e.edgeIndex < e.pathNodeIds.length - 1) {
       e.segmentProgress -= 1;
@@ -112,6 +115,24 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
         approachNodeId: e.pathNodeIds[e.pathNodeIds.length - 1]!, lastNodeIds: e.pathNodeIds.slice(-6),
       });
       events.push({ type: 'CORE_DAMAGED', tick, amount: before - coreHp, hpAfter: coreHp });
+    }
+  }
+
+  // 3b. Healer auras: every `everyTicks` since spawn, restore a flat amount of HP to nearby allies.
+  for (const h of enemies) {
+    const aura = ENEMY_DEFS[h.kind].healAura;
+    if (!aura || h.state !== 'moving') continue;
+    const age = tick - h.spawnTick;
+    if (age <= 0 || age % aura.everyTicks !== 0) continue;
+    const hp = aimPoint(map, h).p;
+    for (const o of enemies) {
+      if (o === h || o.state !== 'moving') continue;
+      const max = o.maxHp;
+      if (o.hp >= max) continue;
+      if (distance3D(aimPoint(map, o).p, hp) > aura.radiusWorld) continue;
+      const amount = Math.min(max - o.hp, Math.max(1, Math.round(aura.amount * hpScale)));
+      o.hp += amount;
+      events.push({ type: 'ENEMY_HEALED', tick, enemyId: o.id, sourceEnemyId: h.id, amount, hpAfter: o.hp });
     }
   }
 
@@ -173,6 +194,21 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
         gold += edef.goldReward;
         events.push({ type: 'ENEMY_KILLED', tick, enemyId: v.id, kind: v.kind, killerTowerId: t.id, gold: edef.goldReward });
         events.push({ type: 'GOLD_CHANGED', tick, delta: edef.goldReward, balance: gold, reason: 'kill' });
+        if (edef.splitInto) {
+          // Children appear on the parent's spot, staggered slightly backwards along the route.
+          for (let k = 0; k < edef.splitInto.count; k++) {
+            let edgeIndex = v.edgeIndex;
+            let segmentProgress = v.segmentProgress - k * 0.3;
+            while (segmentProgress < 0 && edgeIndex > 0) { segmentProgress += 1; edgeIndex -= 1; }
+            const child: EnemyInstance = {
+              id: `e${nextEntityId++}`, kind: edef.splitInto.kind, portalId: v.portalId,
+              hp: spawnHp(edef.splitInto.kind), maxHp: spawnHp(edef.splitInto.kind), state: 'moving', pathNodeIds: v.pathNodeIds,
+              edgeIndex, segmentProgress: Math.max(0, segmentProgress), slowUntilTick: -1, spawnTick: tick,
+            };
+            enemies.push(child);
+            events.push({ type: 'ENEMY_SPAWNED', tick, enemyId: child.id, kind: child.kind, portalId: child.portalId });
+          }
+        }
       }
     }
   }
