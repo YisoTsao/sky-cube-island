@@ -14,8 +14,11 @@ export class CameraRig {
   private yawTo = 0;
   private yawT = 1;
   pitch = MathUtils.degToRad(38);
-  /** Snapped zoom levels, widest first. Index 0 is a strategic overview that fits the whole island. */
-  private readonly zoomLevels = [0.65, 0.85, 1.15, 1.65];
+  /**
+   * Snapped zoom levels, widest first. Index 0 is a strategic overview that fits the whole island;
+   * the last two are close-ups where individual towers and enemies fill a good part of the screen.
+   */
+  private readonly zoomLevels = [0.65, 0.85, 1.15, 1.65, 2.5, 3.6];
   static readonly INTRO_ZOOM_INDEX = 1;
   static readonly DEFAULT_ZOOM_INDEX = 2;
   /** Widest free (wheel / pinch) zoom. */
@@ -50,7 +53,7 @@ export class CameraRig {
 
   zoomStep(dir: 1 | -1) {
     this.zoomIndex = MathUtils.clamp(this.zoomIndex + dir, 0, this.zoomLevels.length - 1);
-    this.zoomTarget = this.zoomLevels[this.zoomIndex]!;
+    this.zoomTarget = Math.min(this.zoomLevels[this.zoomIndex]!, this.maxZoom);
   }
   /** Smooth wheel zoom between snapped levels. */
   zoomBy(delta: number) {
@@ -103,8 +106,12 @@ export class CameraRig {
    */
   get portraitFit(): number { return this.aspect < 1.2 ? Math.min(2, 1.2 / this.aspect) : 1; }
   get halfHeightBase(): number { return this.baseHalfHeight * this.portraitFit; }
-  /** Closest free zoom; portrait screens may zoom further so a single cell is finger-sized. */
-  get maxZoom(): number { return 1.9 * this.portraitFit; }
+  /**
+   * Closest free (wheel / pinch) zoom: about 5 cells top-to-bottom, close enough to read a tower's
+   * level and style. Portrait screens scale with their wider frustum so the close-up matches.
+   */
+  get maxZoom(): number { return CameraRig.MAX_ZOOM * this.portraitFit; }
+  static readonly MAX_ZOOM = 4.6;
 
   update(dt: number) {
     if (this.yawT < 1) {

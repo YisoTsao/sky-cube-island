@@ -161,7 +161,15 @@ export function GameView() {
       if (cards) {
         for (const el of Array.from(cards.children) as HTMLElement[]) {
           const s = scene.portalScreen(el.dataset.portal!);
-          if (s) el.style.transform = `translate(${s.x}px, ${s.y}px) translate(-50%, -100%)`;
+          if (!s) continue;
+          // keep the whole card on screen; the tail slides along the bottom edge to keep pointing
+          // at the portal when the card is pushed in from a screen edge
+          const w = el.offsetWidth, h = el.offsetHeight, m = 6;
+          const x = w + 2 * m < innerWidth ? Math.min(Math.max(s.x, w / 2 + m), innerWidth - w / 2 - m) : s.x;
+          const y = Math.max(s.y, h + m);
+          const tail = Math.max(-w / 2 + 14, Math.min(w / 2 - 14, s.x - x));
+          el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`;
+          el.style.setProperty('--tail', `${tail}px`);
         }
       }
       if (showPerf && (perfAcc += dt) > 0.5) { perfAcc = 0; useUi.getState().set({ perf: scene.perfInfo() }); }

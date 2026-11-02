@@ -107,7 +107,9 @@ async function run(browser, name, device) {
   if (panned < 0.5) fail(`${name}: one-finger drag did not pan (${panned.toFixed(2)})`);
   if ((await page.evaluate(() => window.__sky.controller.state.towers.length)) !== 1) fail(`${name}: drag changed the board`);
 
-  // pinch out zooms in
+  // pinch out zooms in (deselect first so the tower sheet doesn't sit under a finger on small phones)
+  await page.evaluate(() => window.__sky.useUi.getState().set({ selection: null }));
+  await wait(100);
   const topBefore = await page.evaluate(() => window.__sky.scene.rig.camera.top);
   const cx = vp.width / 2, cy = vp.height * 0.45;
   await touchPath(cdp, lerpPath([cx - 30, cy], [cx - 110, cy]), lerpPath([cx + 30, cy], [cx + 110, cy]));
@@ -155,6 +157,7 @@ try {
   const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
   await run(browser, 'portrait', devices['iPhone 13']);
   await run(browser, 'landscape', devices['iPhone 13 landscape']);
+  await run(browser, 'landscape-small', devices['iPhone SE landscape']);
   await run(browser, 'android', devices['Pixel 7']);
   await browser.close();
 } catch (e) {
