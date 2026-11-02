@@ -52,7 +52,12 @@ export interface CoreDef {
   maxHp: number;
 }
 
-export type TowerKind = 'arrow' | 'frost' | 'cannon';
+export type TowerKind = 'arrow' | 'frost' | 'cannon' | 'lightning' | 'wind';
+export const TOWER_KINDS: readonly TowerKind[] = ['arrow', 'frost', 'cannon', 'lightning', 'wind'];
+
+/** Which enemy in range a tower shoots (GDD §16 T2 targeting modes). */
+export type TargetingMode = 'FIRST' | 'LAST' | 'STRONGEST' | 'CLOSEST';
+export const TARGETING_MODES: readonly TargetingMode[] = ['FIRST', 'LAST', 'STRONGEST', 'CLOSEST'];
 export type EnemyKind =
   | 'slime' | 'runner' | 'golem' | 'mini' | 'splitter' | 'knight' | 'wisp' | 'boss'
   | 'boar' | 'ghost' | 'crab' | 'mole' | 'salamander' | 'queen'
@@ -125,6 +130,12 @@ export interface TowerDef {
   projectileTicks: number;
   blastRadiusWorld?: number;
   slow?: { ratio: number; durationTicks: number };
+  /** Lightning: after the first hit, jumps to the nearest un-hit enemy within `radiusWorld`
+   *  (`jumps` + tower level − 1 times), each jump dealing `falloff` × the previous damage. */
+  chain?: { jumps: number; radiusWorld: number; falloff: number };
+  /** Wind: every enemy in range with line of sight (up to `maxTargets` + level − 1) is pushed back
+   *  `cells` (+ `perLevel` per level above 1) along its route; then immune for `immuneTicks`. */
+  knockback?: { cells: number; perLevel: number; immuneTicks: number; maxTargets: number };
 }
 
 export interface EnemyDef {
@@ -152,6 +163,8 @@ export interface EnemyDef {
   shieldAura?: { radiusWorld: number; reduction: number };
   /** The first death revives it on the spot with `hpRatio` of its max HP (gold is paid on the final death). */
   rebirth?: { hpRatio: number };
+  /** 0..1 — fraction of wind knockback ignored (heavy bosses barely budge). Default 0. */
+  knockbackResistance?: number;
   /** Presentation hint: model scale + HP bar width. */
   scale?: number;
 }
@@ -168,7 +181,7 @@ export interface TowerInstance {
   level: TowerLevel;
   cooldownTicks: number;
   investedGold: number;
-  targeting: 'FIRST';
+  targeting: TargetingMode;
   /** Wave index during which the tower was built (stats only). */
   builtWave: number;
 }
@@ -190,6 +203,8 @@ export interface EnemyInstance {
   spawnTick: number;
   /** Set once a rebirth enemy has used its revive. */
   reborn?: boolean;
+  /** Wind knockback cannot hit again before this tick. */
+  pushImmuneUntilTick?: number;
 }
 
 /** Per-portal spawn queue entry, materialised at START_WAVE (D21-07). */
@@ -229,6 +244,7 @@ export type GameCommand =
   | { type: 'BUILD_TOWER'; kind: TowerKind; anchorCellId: CellId }
   | { type: 'UPGRADE_TOWER'; towerId: string }
   | { type: 'SELL_TOWER'; towerId: string }
+  | { type: 'SET_TARGETING'; towerId: string; targeting: TargetingMode }
   | { type: 'UNDO_PREPARE' }
   | { type: 'START_WAVE' }
   | { type: 'CONTINUE' };
@@ -266,6 +282,10 @@ export type GameEvent =
   | { type: 'ENEMY_HEALED'; tick: number; enemyId: string; sourceEnemyId: string; amount: number; hpAfter: number }
   | { type: 'ENEMY_REBORN'; tick: number; enemyId: string; kind: EnemyKind; hpAfter: number }
   | { type: 'CANNON_EXPLODED'; tick: number; towerId: string; at: Vec3; hitIds: string[] }
+  | { type: 'LIGHTNING_CHAINED'; tick: number; towerId: string; hitIds: string[]; points: Vec3[] }
+  | { type: 'WIND_GUST'; tick: number; towerId: string; hitIds: string[] }
+  | { type: 'ENEMY_KNOCKED_BACK'; tick: number; enemyId: string; towerId: string; cells: number }
+  | { type: 'TOWER_TARGETING_CHANGED'; tick: number; towerId: string; targeting: TargetingMode }
   | { type: 'ENEMY_KILLED'; tick: number; enemyId: string; kind: EnemyKind; killerTowerId: string; gold: number }
   | { type: 'ENEMY_REACHED_CORE'; tick: number; enemyId: string; kind: EnemyKind;
       portalId: string; approachNodeId: CellId; lastNodeIds: CellId[] }
@@ -284,7 +304,8 @@ export type GameEventType = GameEvent['type'];
 
 export const ALL_EVENT_TYPES: readonly GameEventType[] = [
   'PHASE_CHANGED', 'WAVE_STARTED', 'WAVE_CLEARED', 'ENEMY_SPAWNED', 'TOWER_FIRED',
-  'TOWER_BLOCKED', 'ENEMY_DAMAGED', 'ENEMY_SLOWED', 'ENEMY_HEALED', 'ENEMY_REBORN', 'CANNON_EXPLODED', 'ENEMY_KILLED',
+  'TOWER_BLOCKED', 'ENEMY_DAMAGED', 'ENEMY_SLOWED', 'ENEMY_HEALED', 'ENEMY_REBORN', 'CANNON_EXPLODED',
+  'LIGHTNING_CHAINED', 'WIND_GUST', 'ENEMY_KNOCKED_BACK', 'TOWER_TARGETING_CHANGED', 'ENEMY_KILLED',
   'ENEMY_REACHED_CORE', 'CORE_DAMAGED', 'GOLD_CHANGED', 'TERRAIN_CHANGED', 'WALL_PLACED',
   'WALL_REMOVED', 'TOWER_BUILT', 'TOWER_UPGRADED', 'TOWER_SOLD', 'ROUTES_CHANGED',
   'UNDO_APPLIED', 'VICTORY', 'DEFEAT',

@@ -20,6 +20,27 @@ export function TowerIcon({ kind, size = 40 }: { kind: TowerKind; size?: number 
       <path d="M11 18 13 22 12 30H8l1-8Z M29 18 27 22 28 30h4l-1-8Z" fill="#9fe7ff" stroke="#2f9fe0" strokeWidth="1" />
     </svg>
   );
+  if (kind === 'lightning') return (
+    <svg width={size} height={size} viewBox="0 0 40 40" aria-hidden>
+      <rect x="8" y="31" width="24" height="5" rx="1" fill="#8f939c" />
+      <rect x="16" y="14" width="8" height="17" fill="#5b5f6a" />
+      <path d="M14 17h12M14 21h12M14 25h12M14 29h12" stroke="#c8793f" strokeWidth="2.2" />
+      <circle cx="20" cy="10" r="6" fill="#fff27a" stroke="#c9a52f" strokeWidth="1.4" />
+      <path d="M21 4 17 11h4l-2 6" fill="none" stroke="#9a86ff" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+  if (kind === 'wind') return (
+    <svg width={size} height={size} viewBox="0 0 40 40" aria-hidden>
+      <rect x="9" y="32" width="22" height="4" rx="1" fill="#8f939c" />
+      <path d="M14 32 16 16h8l2 16Z" fill="#c48a55" stroke="#825a37" strokeWidth="1.4" strokeLinejoin="round" />
+      <path d="M15 17 20 11l5 6Z" fill="#e94f4f" stroke="#b83a3a" strokeWidth="1" strokeLinejoin="round" />
+      <g transform="rotate(20 20 14)" stroke="#825a37" strokeWidth="1.2" strokeLinejoin="round">
+        <path d="M20 14V2h4v8Z" fill="#f3ead6" /><path d="M20 14h12v4h-8Z" fill="#f3ead6" />
+        <path d="M20 14v12h-4v-8Z" fill="#d9cdb2" /><path d="M20 14H8v-4h8Z" fill="#d9cdb2" />
+      </g>
+      <circle cx="20" cy="14" r="1.8" fill="#5b5f6a" />
+    </svg>
+  );
   return (
     <svg width={size} height={size} viewBox="0 0 40 40" aria-hidden>
       <rect x="5" y="24" width="30" height="12" rx="1.5" fill="#8f939c" stroke="#6e7380" strokeWidth="1.5" />

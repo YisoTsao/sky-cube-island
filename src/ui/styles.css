@@ -201,6 +201,11 @@ kbd {
 .sel-note.good { background: rgba(95, 196, 107, .18); color: #276b31; }
 .sel-note.warn { background: rgba(241, 163, 60, .18); color: #8a4b05; }
 .sel-actions { display: flex; gap: 8px; margin-top: 10px; }
+.sel-targeting { display: flex; align-items: center; gap: 4px; margin-top: 8px; }
+.sel-targeting label { font-size: 12px; font-weight: 700; opacity: .75; margin-right: 2px; white-space: nowrap; }
+.sel-targeting .chip { flex: 1; min-width: 0; padding: 4px 0; font: inherit; font-size: 13px; font-weight: 700; border-radius: 8px; cursor: pointer;
+  border: 2px solid rgba(138, 90, 53, .35); background: rgba(255, 255, 255, .6); color: var(--wood-1); }
+.sel-targeting .chip.on { border-color: var(--crystal-deep); background: linear-gradient(180deg, #e6fbff, #bfeeff); color: #0d4a6e; }
 .sel-actions .btn { flex: 1; font-size: 14px; padding: 8px 10px; }
 
 /* hover chip */
@@ -407,11 +412,13 @@ b.bad { color: var(--bad); }
   .hud-toolbar { left: calc(6px + var(--sal)); right: calc(6px + var(--sar)); bottom: calc(6px + var(--sab)); transform: none; gap: 4px; align-items: stretch; }
   .hud.intro .hud-toolbar { transform: translateY(20px); }
   .toolbar-group { gap: 3px; padding: 4px; min-width: 0; border-width: 2px; }
-  .toolbar-group.towers, .toolbar-group.terrain { flex: 3 1 0; }
+  .toolbar-group.towers { flex: 5 1 0; }
+  .toolbar-group.terrain { flex: 3 1 0; }
   .toolbar-group.small { flex: 1 1 0; min-width: 52px; }
   .toolbar-group.towers > div { flex: 1 1 0; min-width: 0; display: flex; }
   .tool-btn, .toolbar-group.small .tool-btn { flex: 1 1 0; width: auto; min-width: 0; height: 64px; padding: 3px 1px 4px; border-radius: 9px; }
   .tool-btn.active { transform: translateY(-3px); }
+  .tool-key { display: none; }
   .tool-icon svg { width: 30px; height: 30px; }
   .tool-label { font-size: 10px; }
   .tool-cost { font-size: 10px; }

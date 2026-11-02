@@ -26,7 +26,7 @@ const MESSAGES: Record<RejectionCode, string> = {
 };
 
 /** Tower commands stay available during COMBAT so kill gold can be reinvested mid-wave. */
-const COMBAT_COMMANDS: ReadonlySet<GameCommand['type']> = new Set(['BUILD_TOWER', 'UPGRADE_TOWER', 'SELL_TOWER']);
+const COMBAT_COMMANDS: ReadonlySet<GameCommand['type']> = new Set(['BUILD_TOWER', 'UPGRADE_TOWER', 'SELL_TOWER', 'SET_TARGETING']);
 
 export function rejectionMessage(code: RejectionCode): string { return MESSAGES[code]; }
 
@@ -192,6 +192,12 @@ export function executeCommand(level: LevelDef, state: GameState, cmd: GameComma
         { type: 'TOWER_SOLD', tick, towerId: t.id, kind: t.kind, level: t.level, anchorCellId: t.anchorCellId },
         goldEvent(tick, refund, draft.gold, 'sell'),
       ], -refund);
+    }
+    case 'SET_TARGETING': {
+      const t = state.towers.find((x) => x.id === cmd.towerId);
+      if (!t) return reject(state, 'NOT_FOUND');
+      const draft: GameState = { ...state, towers: state.towers.map((x) => (x.id === t.id ? { ...x, targeting: cmd.targeting } : x)) };
+      return { ok: true, state: draft, cost: 0, events: [{ type: 'TOWER_TARGETING_CHANGED', tick, towerId: t.id, targeting: cmd.targeting }] };
     }
     case 'START_WAVE': {
       const wave = level.waves[state.currentWaveIndex];
