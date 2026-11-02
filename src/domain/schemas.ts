@@ -3,7 +3,7 @@ import { z } from 'zod';
 const elevation = z.number().int().min(0).max(6);
 const gridPos = z.object({ x: z.number().int(), z: z.number().int() });
 const towerKind = z.enum(['arrow', 'frost', 'cannon']);
-const enemyKind = z.enum(['slime', 'runner', 'golem']);
+const enemyKind = z.enum(['slime', 'runner', 'golem', 'mini', 'splitter', 'knight', 'wisp', 'boss']);
 
 export const SurfaceCellSchema = z.object({
   id: z.string().min(1),
@@ -23,12 +23,14 @@ export const SpawnEntrySchema = z.object({
   count: z.number().int().min(1),
   portalIds: z.array(z.string()).min(1),
   intervalTicks: z.number().int().min(1),
+  delayTicks: z.number().int().min(0).optional(),
 });
 
 export const WaveDefSchema = z.object({
   id: z.string(),
   entries: z.array(SpawnEntrySchema).min(1),
   clearGold: z.number().int().min(0),
+  hpScale: z.number().min(0.1).max(10).optional(),
 });
 
 export const LevelDefSchema = z.object({
@@ -98,6 +100,8 @@ export const SettingsSchema = z.object({
   reducedMotion: z.boolean(),
   screenShake: z.number().min(0).max(1),
   damageNumbers: z.boolean(),
+  /** Mouse at the screen edge scrolls the map (desktop). Optional so older saved settings still load. */
+  edgeScroll: z.boolean().default(true),
   uiScale: z.number().min(0.8).max(1.5),
   volume: z.object({
     master: z.number().min(0).max(1), music: z.number().min(0).max(1), sfx: z.number().min(0).max(1),

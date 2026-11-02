@@ -22,7 +22,11 @@ const MESSAGES: Record<RejectionCode, string> = {
   INVALID_LEVEL_DATA: '關卡資料錯誤',
   NOTHING_TO_UNDO: '沒有可以撤銷的操作',
   MAX_LEVEL: '已經是最高等級',
+  ON_ACTIVE_ROUTE: '戰鬥中不能把塔蓋在敵人正在走的路線上',
 };
+
+/** Tower commands stay available during COMBAT so kill gold can be reinvested mid-wave. */
+const COMBAT_COMMANDS: ReadonlySet<GameCommand['type']> = new Set(['BUILD_TOWER', 'UPGRADE_TOWER', 'SELL_TOWER']);
 
 export function rejectionMessage(code: RejectionCode): string { return MESSAGES[code]; }
 
@@ -85,7 +89,7 @@ function editProtectionCode(map: DerivedMap, cellId: CellId): RejectionCode {
 export function executeCommand(level: LevelDef, state: GameState, cmd: GameCommand): CommandResult {
   if (cmd.type === 'UNDO_PREPARE') return reject(state, state.phase === 'PREPARE' ? 'NOTHING_TO_UNDO' : 'INVALID_PHASE');
   if (cmd.type === 'CONTINUE') return continueAfterResult(level, state);
-  if (state.phase !== 'PREPARE') return reject(state, 'INVALID_PHASE');
+  if (state.phase !== 'PREPARE' && !(state.phase === 'COMBAT' && COMBAT_COMMANDS.has(cmd.type))) return reject(state, 'INVALID_PHASE');
   const map = deriveMap(level, state);
   const tick = state.tick;
 
@@ -142,6 +146,11 @@ export function executeCommand(level: LevelDef, state: GameState, cmd: GameComma
     case 'BUILD_TOWER': {
       const fp = resolveTowerFootprint(map, cmd.anchorCellId);
       if (!fp.ok) return reject(state, fp.code);
+      if (state.phase === 'COMBAT') {
+        // Frozen routes cannot change mid-wave, so never build on top of them.
+        const onRoute = new Set(Object.values(state.frozenRoutes).flat());
+        if (fp.cellIds.some((id) => onRoute.has(id))) return reject(state, 'ON_ACTIVE_ROUTE');
+      }
       const def = TOWER_DEFS[cmd.kind];
       if (state.gold < def.buildCost) return reject(state, 'INSUFFICIENT_GOLD');
       const tower: TowerInstance = {

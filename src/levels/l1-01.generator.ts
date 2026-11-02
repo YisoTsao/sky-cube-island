@@ -1,4 +1,4 @@
-import type { ConnectorDef, Elevation, LevelDef, PlatformDef, SurfaceCell, WaveDef } from '../domain/types';
+import type { ConnectorDef, Elevation, LevelDef, PlatformDef, SpawnEntry, SurfaceCell, WaveDef } from '../domain/types';
 import {
   L1_01_CONNECTORS, L1_01_CORE, L1_01_EDIT_ZONES, L1_01_MAP, L1_01_PORTALS, L1_01_ROCKS, L1_01_TREES,
 } from './l1-01.definition';
@@ -19,28 +19,73 @@ const PLATFORM_NAMES: Record<string, string> = {
   P_LOW: '低平台', P_MID: '中平台', P_HIGH: '高平台',
 };
 
-const INTERVAL = 23; // 1.15s @ 20 TPS
+type Portal = 'A' | 'B';
+const AB: Portal[] = ['A', 'B'];
+/** Spawn group helper: `count` enemies round-robin over `portals`, `every` ticks apart per portal. */
+const g = (enemyKind: SpawnEntry['enemyKind'], count: number, portals: Portal[], every: number, delay = 0): SpawnEntry =>
+  ({ enemyKind, count, portalIds: portals, intervalTicks: every, ...(delay ? { delayTicks: delay } : {}) });
 
+/**
+ * v2.2 wave plan: every wave keeps spawning for at least 120 s (2400 ticks) on both portals,
+ * so a wave can never be cleared in under two minutes, and throws 90–200 enemies at the core.
+ * Tower commands remain available mid-wave so kill gold can be reinvested.
+ */
 export const L1_01_WAVES: WaveDef[] = [
-  { id: 'w1', clearGold: 35, entries: [{ enemyKind: 'slime', count: 6, portalIds: ['A'], intervalTicks: INTERVAL }] },
-  { id: 'w2', clearGold: 40, entries: [
-    { enemyKind: 'slime', count: 8, portalIds: ['A', 'B'], intervalTicks: INTERVAL },
-    { enemyKind: 'runner', count: 3, portalIds: ['A', 'B'], intervalTicks: INTERVAL },
+  { id: 'w1', hpScale: 1.0, clearGold: 60, entries: [
+    g('slime', 10, ['A'], 50),
+    g('slime', 6, ['B'], 60, 360),
+    g('runner', 8, AB, 60, 80),
+    g('mini', 16, AB, 24, 160),
+    g('slime', 16, AB, 50, 160),
+    g('runner', 12, AB, 44, 140),
+    g('slime', 14, AB, 44, 160),
+    g('mini', 12, ['A'], 30, 120),
   ] },
-  { id: 'w3', clearGold: 45, entries: [
-    { enemyKind: 'slime', count: 6, portalIds: ['A', 'B'], intervalTicks: INTERVAL },
-    { enemyKind: 'runner', count: 5, portalIds: ['A', 'B'], intervalTicks: INTERVAL },
-    { enemyKind: 'golem', count: 2, portalIds: ['A', 'B'], intervalTicks: INTERVAL },
+  { id: 'w2', hpScale: 1.15, clearGold: 80, entries: [
+    g('slime', 16, AB, 44),
+    g('runner', 12, AB, 36, 120),
+    g('splitter', 6, AB, 80, 140),
+    g('golem', 4, AB, 100, 140),
+    g('mini', 24, AB, 18, 120),
+    g('slime', 16, AB, 40, 140),
+    g('splitter', 6, AB, 70, 120),
+    g('runner', 14, AB, 30, 120),
   ] },
-  { id: 'w4', clearGold: 50, entries: [
-    { enemyKind: 'slime', count: 3, portalIds: ['A', 'B'], intervalTicks: INTERVAL },
-    { enemyKind: 'runner', count: 8, portalIds: ['A', 'B'], intervalTicks: INTERVAL },
-    { enemyKind: 'golem', count: 4, portalIds: ['A', 'B'], intervalTicks: INTERVAL },
+  { id: 'w3', hpScale: 1.5, clearGold: 100, entries: [
+    g('runner', 16, AB, 30),
+    g('knight', 6, AB, 90, 120),
+    g('slime', 20, AB, 36, 100),
+    g('wisp', 4, AB, 120, 60),
+    g('golem', 6, AB, 90, 100),
+    g('mini', 30, AB, 16, 120),
+    g('knight', 8, AB, 70, 140),
+    g('splitter', 8, AB, 60, 100),
+    g('wisp', 4, AB, 100),
   ] },
-  { id: 'w5', clearGold: 70, entries: [
-    { enemyKind: 'slime', count: 8, portalIds: ['A', 'B'], intervalTicks: INTERVAL },
-    { enemyKind: 'runner', count: 8, portalIds: ['A', 'B'], intervalTicks: INTERVAL },
-    { enemyKind: 'golem', count: 5, portalIds: ['A', 'B'], intervalTicks: INTERVAL },
+  { id: 'w4', hpScale: 1.8, clearGold: 120, entries: [
+    g('slime', 24, AB, 30),
+    g('splitter', 10, AB, 60, 100),
+    g('knight', 8, AB, 70, 100),
+    g('wisp', 6, AB, 80),
+    g('runner', 24, AB, 22, 120),
+    g('golem', 8, AB, 80, 120),
+    g('mini', 36, AB, 14, 100),
+    g('knight', 10, AB, 60, 120),
+    g('wisp', 6, AB, 70),
+  ] },
+  { id: 'w5', hpScale: 2.0, clearGold: 0, entries: [
+    g('slime', 24, AB, 30),
+    g('runner', 20, AB, 26, 80),
+    g('knight', 10, AB, 60, 100),
+    g('wisp', 6, AB, 70),
+    g('splitter', 12, AB, 50, 100),
+    g('golem', 10, AB, 70, 100),
+    g('mini', 40, AB, 12, 80),
+    g('boss', 1, ['A'], 1, 120),
+    g('boss', 1, ['B'], 1, 120),
+    g('knight', 10, AB, 60, 60),
+    g('wisp', 6, AB, 60),
+    g('runner', 20, AB, 22, 60),
   ] },
 ];
 
@@ -158,7 +203,7 @@ export function generateL1_01(): LevelDef {
       approachNodeIds: L1_01_CORE.approaches.map(([x, z]) => cellIdAt(x, z)),
       maxHp: 20,
     },
-    initialGold: 220,
+    initialGold: 300,
     maxShortestPathCost: 160,
     waves: L1_01_WAVES,
     decor: { trees: [...L1_01_TREES], rocks: [...L1_01_ROCKS], flowers: [] },

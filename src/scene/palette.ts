@@ -28,6 +28,11 @@ export const PALETTE = {
   slime: 0x72dc5a, slimeDark: 0x46b13e, slimeLight: 0xb6f59a,
   runner: 0xff9a3c, runnerDark: 0xd8691f, runnerLight: 0xffd07a,
   golem: 0x8f8b94, golemDark: 0x6c6873, golemMoss: 0x5f9441, golemEye: 0xffa040,
+  jelly: 0xff8fc8, jellyDark: 0xe0609e, jellyLight: 0xffc8e4,
+  splitter: 0xb07aff, splitterDark: 0x7f4fd6, splitterLight: 0xdcc4ff,
+  knight: 0x5a6fa0, knightDark: 0x3b4a72, knightLight: 0x9fb3dc,
+  wisp: 0x9cffb0, wispDeep: 0x3fd07a, wispLeaf: 0x6fd36a,
+  boss: 0x6d6670, bossDark: 0x4a444f, bossLava: 0xff6a2a,
   eye: 0x1d2333, white: 0xffffff,
   // sky
   skyTop: 0x5aa8ff, skyMid: 0x9fd0ff, skyHorizon: 0xe3f2ff, skyDeep: 0x3f8fe0, cloud: 0xffffff, cloudShade: 0xb2cbec,

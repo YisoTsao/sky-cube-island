@@ -1,46 +1,42 @@
-import { expect, it } from 'vitest';
-import { level, fresh } from '../unit/helpers';
-import { executeCommand, resolveTowerFootprint } from '../../src/commands/execute';
-import { advanceOneTick } from '../../src/simulation/engine';
-import { computeRoutes } from '../../src/navigation/connectivity';
-import { deriveMap } from '../../src/navigation/derived-map';
-import { sampleTowerRange } from '../../src/navigation/line-of-sight';
-import type { GameState, TowerKind } from '../../src/domain/types';
+import { describe, expect, it } from 'vitest';
+import { runBot, type BotOptions, type RunReport } from './bot';
 
-function bestAnchor(s: GameState, kind: TowerKind) {
-  const map = deriveMap(level, s);
-  let best: { id: string; score: number } | null = null;
-  for (const c of level.cells) {
-    const fp = resolveTowerFootprint(map, c.id);
-    if (!fp.ok) continue;
-    const draft = { ...s, towers: [...s.towers, { id: 'x', kind, anchorCellId: c.id, footprintCellIds: fp.cellIds, level: 1 as const, cooldownTicks: 0, investedGold: 0, targeting: 'FIRST' as const, builtWave: 0 }] };
-    const r = computeRoutes(level, draft);
-    if (!r.ok) continue;
-    const cells = new Set([...r.routes.A!, ...r.routes.B!]);
-    const samples = sampleTowerRange(deriveMap(level, draft), { kind, level: 1, anchorCellId: c.id, footprintCellIds: fp.cellIds });
-    let score = 0;
-    for (const sm of samples) if (sm.state === 'visible' && cells.has(sm.cellId)) score += (r.routes.A!.includes(sm.cellId) ? 1 : 0) + (r.routes.B!.includes(sm.cellId) ? 1 : 0);
-    if (!best || score > best.score) best = { id: c.id, score };
-  }
-  return best;
+/**
+ * Balance report for L1-01 (v2.2). Bots place towers greedily by route coverage and never touch
+ * terrain or walls, so a human who also reshapes the route has more room than these numbers show.
+ */
+const PROFILES: Record<string, BotOptions> = {
+  // Reinvests every 10 s mid-wave, mixed towers, upgrades once six towers are up.
+  active: { mix: ['arrow', 'arrow', 'frost', 'cannon', 'arrow', 'frost', 'cannon'], maxTowers: 14, combatSpendEvery: 200, minScore: 4, upgradeAfter: 6 },
+  // Reinvests every 5 s, frost-heavier mix.
+  activeB: { mix: ['arrow', 'frost', 'arrow', 'cannon'], maxTowers: 16, combatSpendEvery: 100, minScore: 3, upgradeAfter: 10 },
+  // Only spends between waves: gold piles up during the long waves.
+  prepOnly: { mix: ['arrow', 'arrow', 'frost', 'cannon', 'arrow', 'frost', 'cannon'], maxTowers: 14, combatSpendEvery: 0, minScore: 4, upgradeAfter: 6 },
+  // Keeps 40 % of gold idle and rarely reinvests.
+  sloppy: { mix: ['arrow', 'cannon', 'frost'], maxTowers: 14, combatSpendEvery: 600, minScore: 2, upgradeAfter: 30, spendRatio: 0.6 },
+};
+
+const reports: Record<string, RunReport> = {};
+const run = (name: string) => (reports[name] ??= runBot(PROFILES[name]!));
+function log(name: string, r: RunReport) {
+  console.log(`== ${name}: ${r.result} core ${r.coreHp}/20`);
+  for (const w of r.waves) console.log(`   w${w.wave} ${w.seconds.toFixed(1)}s enemies ${w.enemies} leaks ${w.leaks} ${JSON.stringify(w.leakKinds)} hp ${w.hpAfter} gold ${w.goldAfter} [${w.towers}]`);
 }
-it('greedy coverage bot clears all five waves (balance report)', () => {
-  let s = fresh();
-  const order: TowerKind[][] = [['arrow', 'arrow'], ['frost'], ['cannon'], ['arrow'], ['cannon']];
-  for (let w = 0; w < 5; w++) {
-    for (const k of order[w]!) {
-      const b = bestAnchor(s, k);
-      if (!b) continue;
-      const r = executeCommand(level, s, { type: 'BUILD_TOWER', kind: k, anchorCellId: b.id });
-      if (r.ok) s = r.state;
+
+describe('L1-01 balance (bots)', () => {
+  it.each(['active', 'activeB'])('%s player wins, but not untouched', (name) => {
+    const r = run(name); log(name, r);
+    expect(r.result).toBe('VICTORY');
+    expect(r.coreHp).toBeLessThan(20);
+    for (const w of r.waves) {
+      expect(w.seconds, `wave ${w.wave}`).toBeGreaterThanOrEqual(120);
+      expect(w.enemies, `wave ${w.wave}`).toBeGreaterThanOrEqual(90);
     }
-    for (const t of s.towers) { const r = executeCommand(level, s, { type: 'UPGRADE_TOWER', towerId: t.id }); if (r.ok) s = r.state; }
-    const st = executeCommand(level, s, { type: 'START_WAVE' }); if (!st.ok) throw new Error(st.message); s = st.state;
-    let leaks = 0;
-    while (s.phase === 'COMBAT') { const t = advanceOneTick(s, level); s = t.state; leaks += t.events.filter((e) => e.type === 'ENEMY_REACHED_CORE').length; }
-    console.log('wave', w + 1, s.phase, 'hp', s.coreHp, 'gold', s.gold, 'leaks', leaks, 'towers', s.towers.map((t) => t.kind + t.level).join(','));
-    if (s.phase !== 'WAVE_RESULT') break;
-    s = executeCommand(level, s, { type: 'CONTINUE' }).state;
-  }
-  expect(s.phase).toBe('VICTORY');
+  }, 120_000);
+  it.each(['prepOnly', 'sloppy'])('%s player loses', (name) => {
+    const r = run(name); log(name, r);
+    expect(r.result).toBe('DEFEAT');
+    // ...but survives the opening waves, so the loss comes from the late-game pressure.
+    expect(r.waves.length).toBeGreaterThanOrEqual(3);
+  }, 120_000);
 });

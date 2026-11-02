@@ -42,7 +42,7 @@ try {
   const phase = await page.evaluate(() => window.__sky.controller.state.phase);
   if (phase !== 'COMBAT') fail(`expected COMBAT, got ${phase}`);
   // fast-forward the simulation headlessly
-  await page.evaluate(() => { const c = window.__sky.controller; for (let i = 0; i < 400 && c.state.phase === 'COMBAT'; i++) c.update(0.25); });
+  await page.evaluate(() => { const c = window.__sky.controller; for (let i = 0; i < 1600 && c.state.phase === 'COMBAT'; i++) c.update(0.25); });
   await wait(800);
   const after = await page.evaluate(() => window.__sky.controller.state.phase);
   if (!['WAVE_RESULT', 'DEFEAT'].includes(after)) fail(`wave did not resolve: ${after}`);
