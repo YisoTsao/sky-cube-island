@@ -118,6 +118,12 @@ export function GameView() {
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(canvas);
+    // Phones: some browsers report the old size while the rotation animation runs, so re-measure
+    // once it has settled as well.
+    let rotateTimer = 0;
+    const onRotate = () => { resize(); clearTimeout(rotateTimer); rotateTimer = window.setTimeout(resize, 350); };
+    window.addEventListener('orientationchange', onRotate);
+    window.addEventListener('resize', onRotate);
     syncStore();
     if (!params.has('visualTest') && !params.has('nointro')) {
       scene.playIntro();
@@ -429,6 +435,9 @@ export function GameView() {
       canvas.removeEventListener('pointercancel', onCancel);
       unsubTool();
       canvas.removeEventListener('wheel', onWheel);
+      window.removeEventListener('orientationchange', onRotate);
+      window.removeEventListener('resize', onRotate);
+      clearTimeout(rotateTimer);
       canvas.removeEventListener('contextmenu', onContext);
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('keyup', onKeyUp);
@@ -457,6 +466,7 @@ function PortalCard({ portalId, counts }: { portalId: string; counts?: Record<st
   return (
     <div className={`portal-card portal-${portalId}`} data-portal={portalId}>
       <div className="portal-card-title">入口 {portalId}</div>
+      {entries.length > 0 && <div className="portal-card-total">{entries.reduce((a, [, n]) => a + n, 0)} 隻</div>}
       {entries.length ? (
         <div className="portal-card-row">
           {entries.map(([k, n]) => (

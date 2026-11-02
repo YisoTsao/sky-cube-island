@@ -98,7 +98,15 @@ export class CameraRig {
   addTrauma(t: number) { this.trauma = Math.min(1, this.trauma + t * this.shakeScale); }
   setOrbit(active: boolean, speed = 0.12) { this.orbit = { active, speed }; }
 
-  setAspect(aspect: number) { this.aspect = aspect; }
+  /**
+   * Rotating the phone changes the portrait fit and so the close-up limit; clamp the zoom to the
+   * new range so a view pinched all the way in on portrait doesn't come back blown up in landscape.
+   */
+  setAspect(aspect: number) {
+    this.aspect = aspect;
+    this.zoom = MathUtils.clamp(this.zoom, CameraRig.MIN_ZOOM, this.maxZoom);
+    this.zoomTarget = MathUtils.clamp(this.zoomTarget, CameraRig.MIN_ZOOM, this.maxZoom);
+  }
 
   /**
    * Visible half-height before zoom. On tall (portrait phone) viewports the frustum is widened

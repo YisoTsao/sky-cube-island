@@ -135,7 +135,7 @@ export class RenderPipeline {
     this.width = Math.max(1, w); this.height = Math.max(1, h);
     this.renderer.setPixelRatio(this.pixelRatio);
     this.renderer.setSize(this.width, this.height, false);
-    this.composer?.setSize(this.width, this.height);
+    this.composer?.setSize(this.width, this.height, false);
   }
 
   get currentPixelRatio() { return this.pixelRatio; }
