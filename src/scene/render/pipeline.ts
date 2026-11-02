@@ -4,7 +4,7 @@ import {
 } from 'three';
 import {
   BloomEffect, Effect, EffectComposer, EffectPass, FXAAEffect, RenderPass, SMAAEffect, SMAAPreset,
-  TiltShiftEffect, ToneMappingEffect, ToneMappingMode, VignetteEffect,
+  ToneMappingEffect, ToneMappingMode, VignetteEffect,
 } from 'postprocessing';
 import { N8AOPostPass } from 'n8ao';
 
@@ -25,7 +25,7 @@ export interface QualityProfile {
 export const QUALITY: Record<QualityLevel, QualityProfile> = {
   low: { dprMin: 0.75, dprMax: 1, aa: 'fxaa', shadowSize: 1024, softShadows: false, ssao: 'off', bloom: 0, wind: false, cloudLayers: 1, particles: 300, decorDensity: 0.5, runeAnimate: false },
   medium: { dprMin: 1, dprMax: 1, aa: 'smaa', shadowSize: 2048, softShadows: true, ssao: 'off', bloom: 0.45, wind: true, cloudLayers: 1, particles: 800, decorDensity: 0.75, runeAnimate: true },
-  high: { dprMin: 1, dprMax: 1.5, aa: 'msaa', shadowSize: 4096, softShadows: true, ssao: 'half', bloom: 0.75, wind: true, cloudLayers: 2, particles: 1500, decorDensity: 1, runeAnimate: true },
+  high: { dprMin: 1, dprMax: 2, aa: 'msaa', shadowSize: 4096, softShadows: true, ssao: 'half', bloom: 0.75, wind: true, cloudLayers: 2, particles: 1500, decorDensity: 1, runeAnimate: true },
   ultra: { dprMin: 1, dprMax: 2, aa: 'msaa+smaa', shadowSize: 4096, softShadows: true, ssao: 'full', bloom: 0.8, wind: true, cloudLayers: 2, particles: 2500, decorDensity: 1, runeAnimate: true },
 };
 
@@ -61,8 +61,6 @@ export class RenderPipeline {
   composer!: EffectComposer;
   private quality: QualityLevel = 'high';
   private ao?: N8AOPostPass;
-  private tilt?: TiltShiftEffect;
-  private tiltPass?: EffectPass;
   private width = 1;
   private height = 1;
   dynamicResolution = true;
@@ -126,15 +124,12 @@ export class RenderPipeline {
     effects.push(new GradeEffect());
     effects.push(new VignetteEffect({ offset: 0.32, darkness: 0.38 }));
     this.composer.addPass(new EffectPass(this.camera, ...effects));
-    this.tilt = new TiltShiftEffect({ offset: 0.0, rotation: 0, focusArea: 0.42, feather: 0.32, kernelSize: 3 });
-    this.tiltPass = new EffectPass(this.camera, this.tilt);
-    this.tiltPass.enabled = false;
-    this.composer.addPass(this.tiltPass);
+    // No toggleable pass may sit at the end of the chain: postprocessing only flags the *last added*
+    // pass as renderToScreen, so disabling it leaves the frame in an off-screen buffer and the canvas
+    // shows black (this was the "map goes black after a click" bug with the old tilt-shift pass).
     if (p.aa === 'fxaa') this.composer.addPass(new EffectPass(this.camera, new FXAAEffect()));
     else if (p.aa === 'smaa' || p.aa === 'msaa+smaa') this.composer.addPass(new EffectPass(this.camera, new SMAAEffect({ preset: SMAAPreset.HIGH })));
   }
-
-  setTiltShift(on: boolean) { if (this.tiltPass) this.tiltPass.enabled = on; }
 
   resize(w: number, h: number) {
     this.width = Math.max(1, w); this.height = Math.max(1, h);
