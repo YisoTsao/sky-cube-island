@@ -1,5 +1,5 @@
 import type {
-  CellId, EnemyInstance, GameEvent, GameState, LevelDef, TowerInstance, Vec3,
+  CellId, EnemyInstance, GameEvent, GameState, LevelDef, TargetingMode, TowerInstance, Vec3,
 } from '../domain/types';
 import { HEIGHT_STEP_WORLD } from '../domain/types';
 import { ENEMY_DEFS, LEVEL_DAMAGE_MULT, TOWER_DEFS, TPS, isBurrowed, isEnraged, starsForHp } from '../domain/definitions';
@@ -58,6 +58,18 @@ export function enemyPose(map: DerivedMap, e: Pick<EnemyInstance, 'pathNodeIds' 
 export function remainingDistance(e: Pick<EnemyInstance, 'pathNodeIds' | 'edgeIndex' | 'segmentProgress'>): number {
   return (e.pathNodeIds.length - 1) - e.edgeIndex - e.segmentProgress;
 }
+
+interface Candidate { e: EnemyInstance; p: Vec3; d: number }
+
+const byId = (a: Candidate, b: Candidate) => a.e.spawnTick - b.e.spawnTick || (a.e.id < b.e.id ? -1 : a.e.id > b.e.id ? 1 : 0);
+const byFirst = (a: Candidate, b: Candidate) => remainingDistance(a.e) - remainingDistance(b.e) || byId(a, b);
+/** Deterministic target ordering per targeting mode (ties fall back to FIRST, then spawn order). */
+export const TARGET_ORDER: Record<TargetingMode, (a: Candidate, b: Candidate) => number> = {
+  FIRST: byFirst,
+  LAST: (a, b) => remainingDistance(b.e) - remainingDistance(a.e) || byId(a, b),
+  STRONGEST: (a, b) => b.e.hp - a.e.hp || byFirst(a, b),
+  CLOSEST: (a, b) => a.d - b.d || byFirst(a, b),
+};
 
 function aimPoint(map: DerivedMap, e: EnemyInstance): { p: Vec3; pose: EnemyPose } {
   const pose = enemyPose(map, e);
@@ -153,7 +165,51 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
     return best;
   };
 
-  // 4–5. Towers: cooldown, FIRST targeting with 3D range + LOS, damage resolved this tick.
+  // Applies one tower hit (resistances, shields, slow, rebirth, death gold, splitting).
+  const applyHit = (t: TowerInstance, v: EnemyInstance, raw: number): void => {
+    const def = TOWER_DEFS[t.kind];
+    const edef = ENEMY_DEFS[v.kind];
+    const resist = def.damageType === 'physical' ? edef.physicalResistance : (edef.magicResistance ?? 0);
+    const shield = shielding(v);
+    const resisted = resist > 0 || shield > 0;
+    const amount = Math.max(0, Math.round(raw * (1 - resist) * (1 - shield)));
+    v.hp = Math.max(0, v.hp - amount);
+    events.push({ type: 'ENEMY_DAMAGED', tick, enemyId: v.id, sourceTowerId: t.id, amount, damageType: def.damageType, resisted, hpAfter: v.hp });
+    if (def.slow && v.hp > 0) {
+      v.slowUntilTick = tick + def.slow.durationTicks;
+      events.push({ type: 'ENEMY_SLOWED', tick, enemyId: v.id, untilTick: v.slowUntilTick });
+    }
+    if (v.hp <= 0 && edef.rebirth && !v.reborn) {
+      // First death: rise again on the spot (no gold yet).
+      v.reborn = true;
+      v.hp = Math.max(1, Math.round(v.maxHp * edef.rebirth.hpRatio));
+      v.slowUntilTick = -1;
+      events.push({ type: 'ENEMY_REBORN', tick, enemyId: v.id, kind: v.kind, hpAfter: v.hp });
+      return;
+    }
+    if (v.hp > 0) return;
+    v.state = 'dead';
+    gold += edef.goldReward;
+    events.push({ type: 'ENEMY_KILLED', tick, enemyId: v.id, kind: v.kind, killerTowerId: t.id, gold: edef.goldReward });
+    events.push({ type: 'GOLD_CHANGED', tick, delta: edef.goldReward, balance: gold, reason: 'kill' });
+    if (edef.splitInto) {
+      // Children appear on the parent's spot, staggered slightly backwards along the route.
+      for (let k = 0; k < edef.splitInto.count; k++) {
+        let edgeIndex = v.edgeIndex;
+        let segmentProgress = v.segmentProgress - k * 0.3;
+        while (segmentProgress < 0 && edgeIndex > 0) { segmentProgress += 1; edgeIndex -= 1; }
+        const child: EnemyInstance = {
+          id: `e${nextEntityId++}`, kind: edef.splitInto.kind, portalId: v.portalId,
+          hp: spawnHp(edef.splitInto.kind), maxHp: spawnHp(edef.splitInto.kind), state: 'moving', pathNodeIds: v.pathNodeIds,
+          edgeIndex, segmentProgress: Math.max(0, segmentProgress), slowUntilTick: -1, spawnTick: tick,
+        };
+        enemies.push(child);
+        events.push({ type: 'ENEMY_SPAWNED', tick, enemyId: child.id, kind: child.kind, portalId: child.portalId });
+      }
+    }
+  };
+
+  // 4–5. Towers: cooldown, mode-based targeting with 3D range + LOS, damage resolved this tick.
   const towers: TowerInstance[] = state.towers.map((t) => ({ ...t }));
   const towersOrdered = [...towers].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   for (let ti = 0; ti < towersOrdered.length; ti++) {
@@ -162,81 +218,79 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
     if (coreHp <= 0) continue;
     const def = TOWER_DEFS[t.kind];
     const geo = towerGeometry(map, t);
-    const candidates: { e: EnemyInstance; p: Vec3 }[] = [];
+    const candidates: Candidate[] = [];
     let inRangeCount = 0;
     for (const e of enemies) {
       if (e.state !== 'moving' || isBurrowed(e, tick)) continue;
       const { p, pose } = aimPoint(map, e);
       const enemyElev = map.elevationOf(pose.nearestCell);
-      if (distance3D(geo.origin, p) > effectiveRange(t.kind, t.level, geo.elevation, enemyElev)) continue;
+      const d = distance3D(geo.origin, p);
+      if (d > effectiveRange(t.kind, t.level, geo.elevation, enemyElev)) continue;
       inRangeCount++;
       const exclude = new Set(geo.exclude);
       exclude.add(pose.fromCell);
       exclude.add(pose.toCell);
       if (!hasLineOfSight(map, geo.origin, p, exclude)) continue;
-      candidates.push({ e, p });
+      candidates.push({ e, p, d });
     }
     if (!candidates.length) {
       if (inRangeCount > 0 && (tick + ti) % 10 === 0) events.push({ type: 'TOWER_BLOCKED', tick, towerId: t.id });
       continue;
     }
-    candidates.sort((a, b) =>
-      remainingDistance(a.e) - remainingDistance(b.e) || a.e.spawnTick - b.e.spawnTick || (a.e.id < b.e.id ? -1 : 1));
+    candidates.sort(TARGET_ORDER[t.targeting ?? 'FIRST']);
     const target = candidates[0]!;
     t.cooldownTicks = def.cooldownTicks;
     events.push({ type: 'TOWER_FIRED', tick, towerId: t.id, targetId: target.e.id, travelTicks: def.projectileTicks });
+    const raw = def.baseDamage * LEVEL_DAMAGE_MULT[t.level];
 
-    const victims: EnemyInstance[] = [];
     if (def.blastRadiusWorld) {
+      const victims: EnemyInstance[] = [];
       for (const e of enemies) {
         if (e.state !== 'moving' || isBurrowed(e, tick)) continue;
         if (distance3D(aimPoint(map, e).p, target.p) <= def.blastRadiusWorld) victims.push(e);
       }
       events.push({ type: 'CANNON_EXPLODED', tick, towerId: t.id, at: target.p, hitIds: victims.map((v) => v.id) });
-    } else {
-      victims.push(target.e);
-    }
-    for (const v of victims) {
-      const edef = ENEMY_DEFS[v.kind];
-      const resist = def.damageType === 'physical' ? edef.physicalResistance : (edef.magicResistance ?? 0);
-      const shield = shielding(v);
-      const resisted = resist > 0 || shield > 0;
-      const amount = Math.max(0, Math.round(def.baseDamage * LEVEL_DAMAGE_MULT[t.level] * (1 - resist) * (1 - shield)));
-      v.hp = Math.max(0, v.hp - amount);
-      events.push({ type: 'ENEMY_DAMAGED', tick, enemyId: v.id, sourceTowerId: t.id, amount, damageType: def.damageType, resisted, hpAfter: v.hp });
-      if (def.slow && v.hp > 0) {
-        v.slowUntilTick = tick + def.slow.durationTicks;
-        events.push({ type: 'ENEMY_SLOWED', tick, enemyId: v.id, untilTick: v.slowUntilTick });
-      }
-      if (v.hp <= 0 && edef.rebirth && !v.reborn) {
-        // First death: rise again on the spot (no gold yet).
-        v.reborn = true;
-        v.hp = Math.max(1, Math.round(v.maxHp * edef.rebirth.hpRatio));
-        v.slowUntilTick = -1;
-        events.push({ type: 'ENEMY_REBORN', tick, enemyId: v.id, kind: v.kind, hpAfter: v.hp });
-        continue;
-      }
-      if (v.hp <= 0) {
-        v.state = 'dead';
-        gold += edef.goldReward;
-        events.push({ type: 'ENEMY_KILLED', tick, enemyId: v.id, kind: v.kind, killerTowerId: t.id, gold: edef.goldReward });
-        events.push({ type: 'GOLD_CHANGED', tick, delta: edef.goldReward, balance: gold, reason: 'kill' });
-        if (edef.splitInto) {
-          // Children appear on the parent's spot, staggered slightly backwards along the route.
-          for (let k = 0; k < edef.splitInto.count; k++) {
-            let edgeIndex = v.edgeIndex;
-            let segmentProgress = v.segmentProgress - k * 0.3;
-            while (segmentProgress < 0 && edgeIndex > 0) { segmentProgress += 1; edgeIndex -= 1; }
-            const child: EnemyInstance = {
-              id: `e${nextEntityId++}`, kind: edef.splitInto.kind, portalId: v.portalId,
-              hp: spawnHp(edef.splitInto.kind), maxHp: spawnHp(edef.splitInto.kind), state: 'moving', pathNodeIds: v.pathNodeIds,
-              edgeIndex, segmentProgress: Math.max(0, segmentProgress), slowUntilTick: -1, spawnTick: tick,
-            };
-            enemies.push(child);
-            events.push({ type: 'ENEMY_SPAWNED', tick, enemyId: child.id, kind: child.kind, portalId: child.portalId });
-          }
+      for (const v of victims) applyHit(t, v, raw);
+    } else if (def.chain) {
+      // Chain lightning: hop to the nearest un-hit enemy around the previous victim.
+      const hit: Candidate[] = [target];
+      const hitSet = new Set<string>([target.e.id]);
+      let from = target.p;
+      for (let j = 0; j < def.chain.jumps + t.level - 1; j++) {
+        let best: Candidate | null = null;
+        for (const e of enemies) {
+          if (e.state !== 'moving' || hitSet.has(e.id) || isBurrowed(e, tick)) continue;
+          const p = aimPoint(map, e).p;
+          const d = distance3D(from, p);
+          if (d > def.chain.radiusWorld) continue;
+          if (!best || d < best.d || (d === best.d && e.id < best.e.id)) best = { e, p, d };
         }
+        if (!best) break;
+        hit.push(best);
+        hitSet.add(best.e.id);
+        from = best.p;
       }
+      events.push({ type: 'LIGHTNING_CHAINED', tick, towerId: t.id, hitIds: hit.map((h) => h.e.id), points: [geo.origin, ...hit.map((h) => h.p)] });
+      hit.forEach((h, k) => applyHit(t, h.e, raw * Math.pow(def.chain!.falloff, k)));
+    } else if (def.knockback) {
+      // Wind gust: hit several enemies in range, then push the survivors back along their route.
+      const kb = def.knockback;
+      const victims = candidates.slice(0, kb.maxTargets + t.level - 1).map((c) => c.e);
+      events.push({ type: 'WIND_GUST', tick, towerId: t.id, hitIds: victims.map((v) => v.id) });
+      const push = kb.cells + kb.perLevel * (t.level - 1);
+      for (const v of victims) {
+        applyHit(t, v, raw);
+        if (v.state !== 'moving' || (v.pushImmuneUntilTick ?? -1) > tick) continue;
+        const cells = push * (1 - (ENEMY_DEFS[v.kind].knockbackResistance ?? 0));
+        if (cells <= 0) continue;
+        const along = Math.max(0, v.edgeIndex + v.segmentProgress - cells);
+        v.edgeIndex = Math.floor(along);
+        v.segmentProgress = along - v.edgeIndex;
+        v.pushImmuneUntilTick = tick + kb.immuneTicks;
+        events.push({ type: 'ENEMY_KNOCKED_BACK', tick, enemyId: v.id, towerId: t.id, cells: Math.round(cells * 100) / 100 });
+      }
+    } else {
+      applyHit(t, target.e, raw);
     }
   }
 

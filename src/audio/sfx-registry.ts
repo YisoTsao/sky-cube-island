@@ -22,6 +22,10 @@ export const SFX_FOR_EVENT: Record<GameEventType, SfxId | 'none' | 'dynamic'> = 
   ENEMY_HEALED: 'none',
   ENEMY_REBORN: 'explosion',
   CANNON_EXPLODED: 'explosion',
+  LIGHTNING_CHAINED: 'none',
+  WIND_GUST: 'none',
+  ENEMY_KNOCKED_BACK: 'none',
+  TOWER_TARGETING_CHANGED: 'click',
   ENEMY_KILLED: 'dynamic',    // deathSlime / deathRunner / deathGolem
   ENEMY_REACHED_CORE: 'none',
   CORE_DAMAGED: 'coreHit',

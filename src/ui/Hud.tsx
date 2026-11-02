@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactElement } from 'react';
-import type { EnemyKind, TowerKind } from '../domain/types';
+import type { EnemyKind, TargetingMode, TowerKind } from '../domain/types';
+import { TARGETING_MODES, TOWER_KINDS } from '../domain/types';
 import {
   ECONOMY, ENEMY_DEFS, HIGH_GROUND_PER_LEVEL, LEVEL_DAMAGE_MULT, LEVEL_RANGE_BONUS, TOWER_DEFS, sellRefund, upgradeCost,
 } from '../domain/definitions';
@@ -14,12 +15,30 @@ import {
   CoinIcon, EnemyIcon, GearIcon, HeartIcon, LowerIcon, PauseIcon, PlayIcon, RaiseIcon, RotateIcon, StarIcon, TowerIcon, UndoIcon, WallIcon,
 } from './icons';
 
-const TOWER_ORDER: TowerKind[] = ['arrow', 'frost', 'cannon'];
+const TOWER_ORDER: readonly TowerKind[] = TOWER_KINDS;
+export const TARGETING_LABEL: Record<TargetingMode, string> = { FIRST: '最前', LAST: '最後', STRONGEST: '最強', CLOSEST: '最近' };
+const TARGETING_TIP: Record<TargetingMode, string> = {
+  FIRST: '攻擊最接近核心的敵人',
+  LAST: '攻擊最後面的敵人（適合和緩速塔搭配）',
+  STRONGEST: '攻擊目前血量最高的敵人（適合對付頭目）',
+  CLOSEST: '攻擊離塔最近的敵人',
+};
 const TOWER_BLURB: Record<TowerKind, string> = {
   arrow: '單體物理傷害，射速快。高地加射程。',
   frost: '魔法傷害並緩速 30%，無視鐵甲甲蟲的物抗。適合放在轉角。',
   cannon: '範圍爆炸，對付成群敵人。巨人也怕砲擊。',
+  lightning: '魔法閃電會連鎖跳到附近的敵人（每跳傷害 ×0.75），專剋成群小怪。',
+  wind: '一次吹中多隻敵人並往回推，拖長牠們待在射程內的時間。頭目幾乎推不動。',
 };
+
+function towerSpecial(kind: TowerKind, lv: 1 | 2 | 3 = 1): string | null {
+  const d = TOWER_DEFS[kind];
+  if (d.chain) return `連鎖 ${d.chain.jumps + lv - 1} 次`;
+  if (d.knockback) return `推退 ${(d.knockback.cells + d.knockback.perLevel * (lv - 1)).toFixed(1)} 格 · 最多 ${d.knockback.maxTargets + lv - 1} 隻`;
+  if (d.slow) return `緩速 ${Math.round(d.slow.ratio * 100)}%`;
+  if (d.blastRadiusWorld) return '範圍爆炸';
+  return null;
+}
 const ENEMY_TRAIT: Partial<Record<EnemyKind, string>> = {
   mini: '成群出現，適合用砲塔清場',
   splitter: '死亡時分裂成 3 隻小果凍',
@@ -167,6 +186,7 @@ function Toolbar() {
             <span>傷害 {TOWER_DEFS[hoverKind].baseDamage}</span>
             <span>射程 {TOWER_DEFS[hoverKind].baseRangeWorld}</span>
             <span>{TOWER_DEFS[hoverKind].damageType === 'magic' ? '魔法' : '物理'}</span>
+            {towerSpecial(hoverKind) && <span>{towerSpecial(hoverKind)}</span>}
           </div>
           <div className="tower-tip-text">{TOWER_BLURB[hoverKind]}</div>
         </div>
@@ -238,6 +258,16 @@ function SelectionPanel() {
           <div><label>高度</label><b>{elev}</b></div>
           {stats && <div><label>本波擊殺</label><b>{stats.kills}</b></div>}
         </div>
+        {towerSpecial(t.kind, t.level) && <div className="sel-note">{towerSpecial(t.kind, t.level)}</div>}
+        {towersOpen && (
+          <div className="sel-targeting" role="group" aria-label="索敵模式">
+            <label title="按 T 切換">索敵</label>
+            {TARGETING_MODES.map((m) => (
+              <button key={m} className={`chip ${t.targeting === m ? 'on' : ''}`} title={TARGETING_TIP[m]} aria-pressed={t.targeting === m}
+                onClick={() => issue({ type: 'SET_TARGETING', towerId: t.id, targeting: m })}>{TARGETING_LABEL[m]}</button>
+            ))}
+          </div>
+        )}
         {elev > 1 && <div className="sel-note good">▲ 高地加成 +{(HIGH_GROUND_PER_LEVEL * elev).toFixed(1)} 射程</div>}
         {blocked > 0 && <div className="sel-note warn">◐ {blocked} 格被地形擋住視線（顯示為斜線）</div>}
         {towersOpen && (

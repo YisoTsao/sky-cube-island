@@ -210,6 +210,44 @@ export class Vfx {
     d.mesh.visible = true;
   }
 
+  /** Jagged lightning bolt through `points` (glow cubes along a zig-zag polyline). */
+  bolt(points: Vector3[], color: Color | PaletteKey = 'volt') {
+    const c = typeof color === 'string' ? pal(color).clone().multiplyScalar(3.2) : color;
+    const core = new Color(3, 3, 3);
+    const a = new Vector3(), b = new Vector3(), q = new Vector3();
+    for (let i = 0; i + 1 < points.length; i++) {
+      const p0 = points[i]!, p1 = points[i + 1]!;
+      const len = p0.distanceTo(p1);
+      const kinks = Math.max(2, Math.round(len * 3));
+      a.copy(p0);
+      for (let k = 1; k <= kinks; k++) {
+        b.lerpVectors(p0, p1, k / kinks);
+        if (k < kinks) b.add(q.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(0.28));
+        const steps = Math.max(2, Math.round(a.distanceTo(b) / 0.05));
+        for (let st = 0; st < steps; st++) {
+          const pp = a.clone().lerp(b, st / steps);
+          this.glows.spawn({ p: pp, v: new Vector3(), life: 0.14 + Math.random() * 0.08, size: 0.055, color: st % 3 ? c : core, gravity: 0, shrink: true });
+        }
+        a.copy(b);
+      }
+    }
+  }
+
+  /** Swirling wind puffs spreading out from a tower. */
+  gust(at: Vector3, radius: number, count = 26) {
+    for (let i = 0; i < count; i++) {
+      const ang = (i / count) * Math.PI * 2 + Math.random() * 0.2;
+      const r0 = 0.4 + Math.random() * 0.3;
+      const s = radius * (1.4 + Math.random() * 0.6);
+      this.cubes.spawn({
+        p: new Vector3(at.x + Math.cos(ang) * r0, at.y + 0.25 + Math.random() * 0.9, at.z + Math.sin(ang) * r0),
+        v: new Vector3(Math.cos(ang + 0.5) * s, 0.2 + Math.random() * 0.4, Math.sin(ang + 0.5) * s),
+        life: 0.45 + Math.random() * 0.25, size: 0.05 + Math.random() * 0.05,
+        color: pal(i % 3 === 0 ? 'cloudShade' : 'cloud'), gravity: 0, drag: 3.2,
+      });
+    }
+  }
+
   projectile(kind: 'arrow' | 'frost' | 'cannon', from: Vector3, to: Vector3, dur: number, onArrive?: () => void) {
     const p = this.projectiles.find((x) => !x.active && x.kind === kind) ?? this.projectiles.find((x) => x.kind === kind)!;
     if (p.active && p.onArrive) p.onArrive();

@@ -24,6 +24,8 @@ export const PALETTE = {
   // magic
   core: 0x7fe9ff, coreDeep: 0x2fb8ff, portal: 0xa06bff, portalDeep: 0x5b2fbf, portalLight: 0xd3b0ff,
   rune: 0xffd77a,
+  volt: 0xfff27a, voltDeep: 0x9a86ff, copper: 0xc8793f, copperDark: 0x8f4f26,
+  sail: 0xf3ead6, sailShade: 0xd9cdb2,
   // enemies
   slime: 0x72dc5a, slimeDark: 0x46b13e, slimeLight: 0xb6f59a,
   runner: 0xff9a3c, runnerDark: 0xd8691f, runnerLight: 0xffd07a,

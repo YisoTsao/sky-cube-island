@@ -69,12 +69,12 @@ function playAudio(events: GameEvent[], state: GameState) {
       case 'ENEMY_SPAWNED': id = 'spawn'; break;
       case 'TOWER_FIRED': {
         const t = state.towers.find((x) => x.id === e.towerId);
-        id = t?.kind === 'cannon' ? 'cannonFire' : t?.kind === 'frost' ? 'frostFire' : 'arrowFire';
+        id = t?.kind === 'cannon' || t?.kind === 'wind' ? 'cannonFire' : t?.kind === 'frost' || t?.kind === 'lightning' ? 'frostFire' : 'arrowFire';
         break;
       }
       case 'ENEMY_DAMAGED': {
         const t = state.towers.find((x) => x.id === e.sourceTowerId);
-        id = e.resisted ? 'resist' : t?.kind === 'frost' ? 'frostHit' : t?.kind === 'cannon' ? null : 'arrowHit';
+        id = e.resisted ? 'resist' : t?.kind === 'frost' || t?.kind === 'lightning' ? 'frostHit' : t?.kind === 'cannon' || t?.kind === 'wind' ? null : 'arrowHit';
         break;
       }
       case 'CANNON_EXPLODED': id = 'explosion'; break;

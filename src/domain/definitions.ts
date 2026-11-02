@@ -20,13 +20,24 @@ export const TOWER_DEFS: Record<TowerKind, TowerDef> = {
     cooldownTicks: 52, damageType: 'physical', muzzleOffsetWorld: 1.1, projectileTicks: 8,
     blastRadiusWorld: 1.05,
   },
+  // v2.5 (GDD §16 T2): chain lightning and knock-back wind.
+  lightning: {
+    kind: 'lightning', name: '雷光塔', buildCost: 115, baseDamage: 24, baseRangeWorld: 3.0,
+    cooldownTicks: 34, damageType: 'magic', muzzleOffsetWorld: 1.7, projectileTicks: 1,
+    chain: { jumps: 2, radiusWorld: 1.7, falloff: 0.75 },
+  },
+  wind: {
+    kind: 'wind', name: '風車塔', buildCost: 95, baseDamage: 8, baseRangeWorld: 2.6,
+    cooldownTicks: 56, damageType: 'physical', muzzleOffsetWorld: 1.5, projectileTicks: 2,
+    knockback: { cells: 0.9, perLevel: 0.3, immuneTicks: 70, maxTargets: 4 },
+  },
 };
 
 /** GDD §8 (+ v2.2 roster expansion: swarms, splitters, armour, healers and a boss). */
 export const ENEMY_DEFS: Record<EnemyKind, EnemyDef> = {
   slime: { kind: 'slime', name: '綠史萊姆', hp: 90, speedCellsPerSecond: 1.0, coreDamage: 1, goldReward: 4, physicalResistance: 0, targetOffsetWorld: 0.30 },
   runner: { kind: 'runner', name: '疾風獸', hp: 60, speedCellsPerSecond: 1.65, coreDamage: 1, goldReward: 4, physicalResistance: 0, targetOffsetWorld: 0.35 },
-  golem: { kind: 'golem', name: '石殼巨人', hp: 320, speedCellsPerSecond: 0.62, coreDamage: 3, goldReward: 10, physicalResistance: 0.2, targetOffsetWorld: 0.55 },
+  golem: { kind: 'golem', name: '石殼巨人', hp: 320, speedCellsPerSecond: 0.62, coreDamage: 3, goldReward: 10, physicalResistance: 0.2, targetOffsetWorld: 0.55, knockbackResistance: 0.3 },
   mini: { kind: 'mini', name: '小果凍', hp: 30, speedCellsPerSecond: 1.3, coreDamage: 1, goldReward: 1, physicalResistance: 0, targetOffsetWorld: 0.2, scale: 0.6 },
   splitter: {
     kind: 'splitter', name: '分裂史萊姆', hp: 160, speedCellsPerSecond: 0.85, coreDamage: 2, goldReward: 5, physicalResistance: 0, targetOffsetWorld: 0.38,
@@ -39,7 +50,7 @@ export const ENEMY_DEFS: Record<EnemyKind, EnemyDef> = {
   },
   boss: {
     kind: 'boss', name: '岩王巨像', hp: 1500, speedCellsPerSecond: 0.42, coreDamage: 5, goldReward: 100, physicalResistance: 0.25, targetOffsetWorld: 0.9,
-    slowResistance: 0.5, scale: 1.7,
+    slowResistance: 0.5, scale: 1.7, knockbackResistance: 0.7,
   },
   // v2.3 roster: each level fields at least ten kinds.
   boar: {
@@ -51,7 +62,7 @@ export const ENEMY_DEFS: Record<EnemyKind, EnemyDef> = {
   },
   crab: {
     kind: 'crab', name: '晶殼蟹', hp: 260, speedCellsPerSecond: 0.7, coreDamage: 2, goldReward: 9, physicalResistance: 0.35, magicResistance: 0.35, targetOffsetWorld: 0.36,
-    scale: 1.1,
+    scale: 1.1, knockbackResistance: 0.3,
   },
   mole: {
     kind: 'mole', name: '鑽地鼴鼠', hp: 150, speedCellsPerSecond: 1.0, coreDamage: 1, goldReward: 6, physicalResistance: 0, targetOffsetWorld: 0.3,
@@ -63,7 +74,7 @@ export const ENEMY_DEFS: Record<EnemyKind, EnemyDef> = {
   },
   queen: {
     kind: 'queen', name: '史萊姆女王', hp: 1700, speedCellsPerSecond: 0.4, coreDamage: 5, goldReward: 120, physicalResistance: 0.15, targetOffsetWorld: 0.95,
-    slowResistance: 0.5, splitInto: { kind: 'splitter', count: 3 }, scale: 1.9,
+    slowResistance: 0.5, splitInto: { kind: 'splitter', count: 3 }, scale: 1.9, knockbackResistance: 0.7,
   },
   // v2.4 roster (levels 3–4).
   bat: {
@@ -72,7 +83,7 @@ export const ENEMY_DEFS: Record<EnemyKind, EnemyDef> = {
   },
   yeti: {
     kind: 'yeti', name: '雪原巨猿', hp: 380, speedCellsPerSecond: 0.75, coreDamage: 2, goldReward: 11, physicalResistance: 0.15, magicResistance: 0.4, targetOffsetWorld: 0.6,
-    slowResistance: 1, scale: 1.1,
+    slowResistance: 1, scale: 1.1, knockbackResistance: 0.4,
   },
   shaman: {
     kind: 'shaman', name: '護盾薩滿', hp: 160, speedCellsPerSecond: 0.9, coreDamage: 1, goldReward: 9, physicalResistance: 0, targetOffsetWorld: 0.5,
@@ -80,7 +91,7 @@ export const ENEMY_DEFS: Record<EnemyKind, EnemyDef> = {
   },
   frostGiant: {
     kind: 'frostGiant', name: '冰霜巨人', hp: 2200, speedCellsPerSecond: 0.4, coreDamage: 5, goldReward: 130, physicalResistance: 0.3, magicResistance: 0.2, targetOffsetWorld: 0.95,
-    slowResistance: 1, scale: 1.8,
+    slowResistance: 1, scale: 1.8, knockbackResistance: 0.8,
   },
   imp: {
     kind: 'imp', name: '熔岩小鬼', hp: 110, speedCellsPerSecond: 1.5, coreDamage: 1, goldReward: 5, physicalResistance: 0.3, targetOffsetWorld: 0.35,
@@ -88,7 +99,7 @@ export const ENEMY_DEFS: Record<EnemyKind, EnemyDef> = {
   },
   phoenix: {
     kind: 'phoenix', name: '不死火鳥', hp: 2200, speedCellsPerSecond: 0.55, coreDamage: 5, goldReward: 150, physicalResistance: 0, magicResistance: 0.3, targetOffsetWorld: 1.0,
-    slowResistance: 0.5, rebirth: { hpRatio: 0.6 }, scale: 1.5,
+    slowResistance: 0.5, rebirth: { hpRatio: 0.6 }, scale: 1.5, knockbackResistance: 0.7,
   },
 };
 
