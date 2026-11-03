@@ -1,7 +1,8 @@
 import { Group, Mesh, Vector3, type BufferGeometry } from 'three';
 import type { EnemyKind, TowerBranch, TowerKind, TowerLevel } from '../domain/types';
 import { towerParts } from './models/towers';
-import { enemyGeometry, trapGeometry, wallGeometry } from './models/props';
+import { trapGeometry, wallGeometry } from './models/props';
+import { enemyGeometry, type EnemyDetail } from './models/enemies';
 import { createVoxelMaterial, type VoxelMaterial } from './materials/voxel-material';
 
 const DEPTH_LAYER = 1;
@@ -144,8 +145,8 @@ export class EnemyView {
   private burrowK = 0;
   lastPos = new Vector3();
   facing = 0;
-  constructor(readonly id: string, readonly kind: EnemyKind, readonly laneOffset: number) {
-    const g = enemyGeometry(kind);
+  constructor(readonly id: string, readonly kind: EnemyKind, readonly laneOffset: number, detail: EnemyDetail = 'high') {
+    const g = enemyGeometry(kind, detail);
     this.height = g.height;
     const jelly = kind === 'slime' || kind === 'mini' || kind === 'splitter' || kind === 'queen';
     const ghost = kind === 'ghost';
