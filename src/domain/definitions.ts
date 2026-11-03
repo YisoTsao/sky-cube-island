@@ -103,7 +103,7 @@ export const ENEMY_DEFS: Record<EnemyKind, EnemyDef> = {
   },
   // v2.7 roster (GDD §16 T2): a flyer that ignores the road and a ram that smashes wooden walls.
   wyvern: {
-    kind: 'wyvern', name: '風翼飛龍', hp: 130, speedCellsPerSecond: 0.9, coreDamage: 2, goldReward: 7, physicalResistance: 0, targetOffsetWorld: 0.4,
+    kind: 'wyvern', name: '風翼飛龍', hp: 130, speedCellsPerSecond: 0.75, coreDamage: 1, goldReward: 7, physicalResistance: 0, targetOffsetWorld: 0.4,
     flying: { altitudeWorld: 1.7 }, knockbackResistance: 0.2,
   },
   ram: {

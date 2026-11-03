@@ -63,7 +63,7 @@ export function remainingDistance(e: Pick<EnemyInstance, 'pathNodeIds' | 'edgeIn
 }
 
 /** Flyers (GDD §16 T2): a two-node path from the portal straight to the nearest core approach. */
-export function flightPath(level: LevelDef, map: DerivedMap, portalCellId: CellId): { path: CellId[]; dist: number } {
+export function flightPath(level: LevelDef, map: Pick<DerivedMap, 'index'>, portalCellId: CellId): { path: CellId[]; dist: number } {
   const from = map.index.cells.get(portalCellId)!;
   let best: { id: CellId; d: number } | null = null;
   for (const id of level.core.approachNodeIds) {
@@ -73,6 +73,20 @@ export function flightPath(level: LevelDef, map: DerivedMap, portalCellId: CellI
     if (!best || d < best.d || (d === best.d && id < best.id)) best = { id, d };
   }
   return best ? { path: [portalCellId, best.id], dist: Math.max(1, best.d) } : { path: [portalCellId], dist: 1 };
+}
+
+/** Cells a flyer passes over between its portal and the core (for coverage hints and bots). */
+export function flightLaneCells(level: LevelDef, map: Pick<DerivedMap, 'index'>, portalCellId: CellId): CellId[] {
+  const { path } = flightPath(level, map, portalCellId);
+  const a = map.index.cells.get(path[0]!)!, b = map.index.cells.get(path[path.length - 1]!)!;
+  const steps = Math.max(1, Math.ceil(Math.hypot(b.pos.x - a.pos.x, b.pos.z - a.pos.z) * 3));
+  const out: CellId[] = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const id = map.index.byPos.get(`${Math.round(a.pos.x + (b.pos.x - a.pos.x) * t)},${Math.round(a.pos.z + (b.pos.z - a.pos.z) * t)}`);
+    if (id && !out.includes(id)) out.push(id);
+  }
+  return out;
 }
 
 /** Wall breakers plan around towers and terrain but straight through wooden walls. */

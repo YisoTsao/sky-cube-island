@@ -11,6 +11,7 @@ import { endlessIdOf } from '../levels/endless';
 import { challengesFor } from '../domain/challenges';
 import { readSave } from '../persistence/save';
 import { launchLevel } from './launch';
+import { CHAPTERS } from '../levels/campaign';
 
 applyInitialSettings();
 const params = new URLSearchParams(location.search);
@@ -56,6 +57,7 @@ function Title() {
     if (isLevelId(current) && open.includes(current) && !progress.best[current]) return current;
     return open[open.length - 1] ?? 'L1-01';
   });
+  const [chapter, setChapter] = useState(() => Math.max(0, CHAPTERS.findIndex((c) => c.levelIds.includes(picked))));
   const [endless, setEndless] = useState(false);
   const endlessOpen = isEndlessUnlocked(picked, progress);
   const playId = endless && endlessOpen ? endlessIdOf(picked) : picked;
@@ -81,8 +83,25 @@ function Title() {
           <span className="logo-sub">守護之心</span>
         </h1>
         <p className="title-tag">改造地形、架設高塔，守住漂浮島嶼的心臟。</p>
+        <div className="chapter-tabs" role="tablist" aria-label="選擇章節">
+          {CHAPTERS.map((c, i) => {
+            const first = c.levelIds[0] as LevelId;
+            const open = isUnlocked(first, progress);
+            const cleared = c.levelIds.filter((id) => (progress.best[id] ?? 0) > 0).length;
+            return (
+              <button
+                key={c.id} role="tab" aria-selected={chapter === i} disabled={!open}
+                className={`chapter-tab ${chapter === i ? 'on' : ''}`}
+                title={open ? c.subtitle : '通關上一章後解鎖'}
+                onClick={() => { audio.play('click'); setChapter(i); const ids = c.levelIds.filter((id) => isUnlocked(id as LevelId, progress)); setPicked((ids[ids.length - 1] ?? first) as LevelId); }}
+              >
+                {c.name}{open ? <span className="chapter-count">{cleared}/{c.levelIds.length}</span> : ' 🔒'}
+              </button>
+            );
+          })}
+        </div>
         <div className="level-select" role="group" aria-label="選擇關卡">
-          {LEVEL_IDS.map((id) => <LevelCard key={id} id={id} selected={picked === id} onPick={() => { audio.play('click'); setPicked(id); }} />)}
+          {(CHAPTERS[chapter]?.levelIds ?? LEVEL_IDS).map((id) => <LevelCard key={id} id={id as LevelId} selected={picked === id} onPick={() => { audio.play('click'); setPicked(id as LevelId); }} />)}
         </div>
         <div className="mode-switch" role="group" aria-label="遊戲模式">
           <button className={`mode-btn ${!endless || !endlessOpen ? 'on' : ''}`} aria-pressed={!endless || !endlessOpen} onClick={() => { audio.play('click'); setEndless(false); }}>戰役</button>

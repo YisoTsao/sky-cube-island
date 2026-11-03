@@ -2,18 +2,32 @@
 import { level as L1 } from '../unit/helpers';
 import { createInitialState } from '../../src/simulation/engine';
 import { executeCommand, resolveTowerFootprint } from '../../src/commands/execute';
-import { advanceOneTick } from '../../src/simulation/engine';
+import { advanceOneTick, flightLaneCells } from '../../src/simulation/engine';
 import { computeRoutes } from '../../src/navigation/connectivity';
 import { deriveMap } from '../../src/navigation/derived-map';
 import { sampleTowerRange } from '../../src/navigation/line-of-sight';
-import { TOWER_DEFS, upgradeCost } from '../../src/domain/definitions';
+import { ENEMY_DEFS, TOWER_DEFS, upgradeCost } from '../../src/domain/definitions';
 import type { GameState, LevelDef, TowerKind } from '../../src/domain/types';
 
 /** Best anchor by visible route-cell coverage (both portals' routes). */
-export function bestAnchor(s: GameState, kind: TowerKind, level: LevelDef = L1): { id: string; score: number } | null {
+export function bestAnchor(s: GameState, kind: TowerKind, level: LevelDef = L1, spread = false): { id: string; score: number } | null {
   const map = deriveMap(level, s);
   const routesNow = s.phase === 'COMBAT' ? s.frozenRoutes : (() => { const r = computeRoutes(level, s); return r.ok ? r.routes : {}; })();
   const onRoute = new Set(Object.values(routesNow).flat());
+  // a good player also covers the straight lanes flyers take (shown in the overlay)
+  const flyers = level.waves.some((w) => w.entries.some((e) => ENEMY_DEFS[e.enemyKind].flying));
+  const lanes = flyers ? level.portals.map((p) => flightLaneCells(level, map, p.cellId)) : [];
+  // spread: a route that is already well covered is worth less (good players guard every lane)
+  const covered: Record<string, number> = {};
+  if (spread) {
+    for (const t of s.towers) {
+      for (const sm of sampleTowerRange(map, t)) {
+        if (sm.state !== 'visible') continue;
+        for (const [k, route] of Object.entries(routesNow)) if (route.includes(sm.cellId)) covered[k] = (covered[k] ?? 0) + 1;
+      }
+    }
+  }
+  const w = (k: string) => (spread ? 1 / (1 + (covered[k] ?? 0) / 10) : 1);
   let best: { id: string; score: number } | null = null;
   for (const c of level.cells) {
     const fp = resolveTowerFootprint(map, c.id);
@@ -27,7 +41,8 @@ export function bestAnchor(s: GameState, kind: TowerKind, level: LevelDef = L1):
     let score = 0;
     for (const sm of samples) {
       if (sm.state !== 'visible') continue;
-      for (const route of Object.values(routes)) if (route.includes(sm.cellId)) score++;
+      for (const [k, route] of Object.entries(routes)) if (route.includes(sm.cellId)) score += w(k);
+      for (const lane of lanes) if (lane.includes(sm.cellId)) score += 0.8;
     }
     if (!best || score > best.score) best = { id: c.id, score };
   }
@@ -45,6 +60,8 @@ export interface BotOptions {
   minScore: number;
   /** Prefer upgrades over new towers once this many towers exist. */
   upgradeAfter: number;
+  /** Value coverage of poorly guarded routes higher (bots for maps with many separate lanes). */
+  spread?: boolean;
   /** Fraction of gold the bot is willing to spend (sloppy players leave gold idle). */
   spendRatio?: number;
 }
@@ -67,7 +84,7 @@ function spend(s: GameState, o: BotOptions, level: LevelDef): GameState {
       }
       if (!canBuild) break;
     }
-    const b = bestAnchor(s, kind, level);
+    const b = bestAnchor(s, kind, level, o.spread);
     if (!b || b.score < o.minScore) {
       if (up && s.gold - up.cost >= budgetFloor) { const r = executeCommand(level, s, { type: 'UPGRADE_TOWER', towerId: up.t.id }); if (r.ok) { s = r.state; continue; } }
       break;
