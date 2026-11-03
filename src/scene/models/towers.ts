@@ -1,5 +1,5 @@
 import type { BufferGeometry } from 'three';
-import type { TowerKind, TowerLevel } from '../../domain/types';
+import type { TowerBranch, TowerKind, TowerLevel } from '../../domain/types';
 import { VoxelModel } from '../voxel/model';
 import { FLAG_EMISSIVE } from '../materials/voxel-material';
 
@@ -30,7 +30,7 @@ function stoneBase(m: VoxelModel, h: number, inset = 3) {
   }
 }
 
-function arrowTower(level: TowerLevel): TowerParts {
+function arrowTower(level: TowerLevel, branch?: TowerBranch): TowerParts {
   const body = new VoxelModel(32, 36, 32);
   if (level >= 2) stoneBase(body, 5, 2);
   const y0 = level >= 2 ? 6 : 0;
@@ -78,9 +78,16 @@ function arrowTower(level: TowerLevel): TowerParts {
       cloth.box(x, 15, z, x + 1, 16, z, 'goldDark');
     }
   }
+  if (level >= 4 && cloth) {
+    // Lv4: blue (sniper) or crimson (repeater) pennants on the canopy corners
+    for (const [x, z] of [[7, 7], [24, 7], [7, 24], [24, 24]] as const) {
+      body.box(x, 33, z, x, 35, z, 'woodDark');
+      cloth.box(x + 1, 33, z, x + 3, 35, z, branch === 'B' ? 'banner' : 'clothBlue');
+    }
+  }
   // head: crossbow(s) — pivot at 1.6 world (25.6 voxels) → head geometry is local
   const head = new VoxelModel(20, 8, 20);
-  const bows = level >= 3 ? [-3, 3] : [0];
+  const bows = level >= 4 && branch === 'B' ? [-5, 0, 5] : level >= 4 ? [0] : level >= 3 ? [-3, 3] : [0];
   for (const off of bows) {
     const cx = 10 + off;
     head.box(cx - 1, 2, 3, cx, 3, 16, 'woodDark'); // stock
@@ -91,6 +98,12 @@ function arrowTower(level: TowerLevel): TowerParts {
     head.box(cx - 1, 4, 17, cx, 4, 18, 'ironLight');
   }
   head.box(8, 0, 8, 11, 1, 11, 'iron');
+  if (level >= 4 && branch !== 'B') {
+    // sniper: long iron barrel with a crystal scope
+    head.box(9, 2, 1, 10, 3, 19, 'iron');
+    head.box(9, 5, 7, 10, 6, 11, 'crystalLight');
+    head.box(9, 4, 8, 10, 4, 8, 'ironLight');
+  }
   return {
     body: body.build(V),
     head: head.build(V, { originY: -2.5 * V }),
@@ -99,7 +112,7 @@ function arrowTower(level: TowerLevel): TowerParts {
   };
 }
 
-function frostTower(level: TowerLevel): TowerParts {
+function frostTower(level: TowerLevel, branch?: TowerBranch): TowerParts {
   const body = new VoxelModel(32, 24, 32);
   stoneBase(body, 4, 4);
   // tiered pedestal
@@ -121,7 +134,11 @@ function frostTower(level: TowerLevel): TowerParts {
     }
   };
   if (level === 1) crystal(16, 16, 12, 2.6, 12);
-  if (level >= 2) {
+  if (level >= 4 && branch !== 'B') {
+    // permafrost: one tall spire ringed by jagged deep-blue spikes
+    crystal(16, 16, 18, 3, 12);
+    for (const [x, z] of [[11, 11], [21, 11], [11, 21], [21, 21]] as const) crystal(x, z, 6, 1.2, 12);
+  } else if (level >= 2) {
     crystal(16, 16, 12, 2.4, 12);
     crystal(12.5, 18.5, 7, 1.5, 12);
     crystal(19.5, 13.5, 8, 1.6, 12);
@@ -134,6 +151,8 @@ function frostTower(level: TowerLevel): TowerParts {
       const ang = (a / 16) * Math.PI * 2;
       const x = 12 + Math.cos(ang) * 9, z = 12 + Math.sin(ang) * 9;
       if (a % 2 === 0) head.box(x - 0.5, 4, z - 0.5, x + 0.5, 5, z + 0.5, a % 4 === 0 ? 'crystal' : 'crystalLight');
+      // blizzard: a second, tilted ring of shards
+      if (level >= 4 && branch === 'B' && a % 2 === 1) head.set(12 + Math.cos(ang) * 6, 1 + (a % 4 === 1 ? 0 : 7), 12 + Math.sin(ang) * 6, 'crystalLight');
     }
   }
   return {
@@ -144,7 +163,7 @@ function frostTower(level: TowerLevel): TowerParts {
   };
 }
 
-function cannonTower(level: TowerLevel): TowerParts {
+function cannonTower(level: TowerLevel, branch?: TowerBranch): TowerParts {
   const body = new VoxelModel(32, 20, 32);
   stoneBase(body, 7, 2);
   // crenellations
@@ -166,18 +185,29 @@ function cannonTower(level: TowerLevel): TowerParts {
     glow = new VoxelModel(32, 20, 32);
     for (const [x, z] of [[8, 1], [23, 1], [8, 30], [23, 30]] as const) glow.box(x, 4, z, x + 1, 5, z, 'rune');
   }
+  if (level >= 4) {
+    // heavy: iron-capped merlons; shredder: copper spikes on every merlon
+    for (let i = 3; i <= 28; i += 4) {
+      const c = branch === 'B' ? 'copper' : 'ironLight';
+      body.box(i, 11, 2, i + 1, 11, 3, c); body.box(i, 11, 28, i + 1, 11, 29, c);
+      body.box(2, 11, i, 3, 11, i + 1, c); body.box(28, 11, i, 29, 11, i + 1, c);
+      if (branch === 'B') { body.set(i, 12, 2, 'ironLight'); body.set(i, 12, 29, 'ironLight'); body.set(2, 12, i, 'ironLight'); body.set(29, 12, i, 'ironLight'); }
+    }
+  }
   // head: barrel(s) pointing +z, pivot at 1.1 world (17.6 vox)
   const head = new VoxelModel(22, 10, 26);
   head.box(6, 0, 6, 15, 4, 15, 'woodDark'); // carriage
   head.box(5, 0, 8, 5, 3, 13, 'wood'); head.box(16, 0, 8, 16, 3, 13, 'wood');
-  const barrels = level >= 3 ? [7, 14] : [10.5];
+  const heavy = level >= 4 && branch !== 'B';
+  const barrels = heavy ? [10.5] : level >= 3 ? [7, 14] : [10.5];
   for (const bx of barrels) {
-    const r = level >= 3 ? 2.2 : 2.8;
+    const r = heavy ? 3.6 : level >= 3 ? 2.2 : 2.8;
     for (let z = 4; z < 25; z++) {
       for (let y = 0; y < 10; y++) for (let x = 0; x < 22; x++) {
         const dx = x + 0.5 - bx - 0.5, dy = y + 0.5 - 5;
         const rr = z > 21 ? r + 0.7 : r;
-        if (dx * dx + dy * dy <= rr * rr) head.set(x, y, z, z > 21 || (level >= 2 && z % 6 === 0) ? 'ironLight' : 'iron');
+        const band = level >= 4 && branch === 'B' ? 'copper' : 'ironLight';
+        if (dx * dx + dy * dy <= rr * rr) head.set(x, y, z, z > 21 ? 'ironLight' : level >= 2 && z % 6 === 0 ? band : 'iron');
       }
     }
     // muzzle hole
@@ -192,7 +222,7 @@ function cannonTower(level: TowerLevel): TowerParts {
 }
 
 /** Lightning (雷光塔): copper tesla coil on a stone plinth; head = floating charged orb. */
-function lightningTower(level: TowerLevel): TowerParts {
+function lightningTower(level: TowerLevel, branch?: TowerBranch): TowerParts {
   const body = new VoxelModel(32, 28, 32);
   stoneBase(body, 4, 3);
   body.box(9, 5, 9, 22, 6, 22, 'rockDark', true);
@@ -217,10 +247,18 @@ function lightningTower(level: TowerLevel): TowerParts {
     }
     for (const [x, z] of [[4, 4], [27, 4], [4, 27], [27, 27]] as const) glow.box(x, 5, z, x, 6, z, 'voltDeep');
   }
+  if (level >= 4 && branch !== 'B') {
+    // storm: four extra rods between the corners, all crackling
+    for (const [x, z] of [[16, 4], [16, 27], [4, 16], [27, 16]] as const) {
+      body.box(x, 5, z, x, 21, z, 'iron');
+      glow.box(x, 22, z, x, 23, z, 'volt');
+    }
+  }
   // head: charged orb at 1.7 world (27.2 vox) — pivot at orb centre
   const head = new VoxelModel(14, 14, 14);
-  head.sphere(7, 7, 7, level >= 2 ? 3.6 : 3.1, 'volt');
-  head.sphere(7, 7, 7, 1.8, 'white');
+  const overload = level >= 4 && branch === 'B';
+  head.sphere(7, 7, 7, overload ? 4.4 : level >= 2 ? 3.6 : 3.1, overload ? 'voltDeep' : 'volt');
+  head.sphere(7, 7, 7, overload ? 2.4 : 1.8, 'white');
   return {
     body: body.build(V),
     glow: glow.build(V, { flags: FLAG_EMISSIVE }),
@@ -230,7 +268,7 @@ function lightningTower(level: TowerLevel): TowerParts {
 }
 
 /** Wind (風車塔): tapered timber mill with a sail rotor that turns to face the enemies. */
-function windTower(level: TowerLevel): TowerParts {
+function windTower(level: TowerLevel, branch?: TowerBranch): TowerParts {
   const body = new VoxelModel(32, 26, 32);
   stoneBase(body, 3, 4);
   // tapered timber tower
@@ -255,13 +293,23 @@ function windTower(level: TowerLevel): TowerParts {
   if (level >= 3) {
     cloth = new VoxelModel(32, 26, 32);
     body.box(16, 25, 16, 16, 25, 16, 'woodDark');
-    cloth.box(17, 21, 16, 20, 23, 16, 'gold');
+    cloth.box(17, 21, 16, 20, 23, 16, level >= 4 ? (branch === 'B' ? 'stoneLight' : 'clothBlue') : 'gold');
+  }
+  if (level >= 4) {
+    // Lv4: a storm-grey (hurricane) or sky-blue (tornado) skirt of cloth around the balcony
+    cloth ??= new VoxelModel(32, 26, 32);
+    for (let a = 0; a < 20; a++) {
+      const ang = (a / 20) * Math.PI * 2;
+      cloth.box(16 + Math.cos(ang) * 8, 12, 16 + Math.sin(ang) * 8, 16 + Math.cos(ang) * 8, 14, 16 + Math.sin(ang) * 8, a % 2 ? 'sailShade' : branch === 'B' ? 'stoneLight' : 'clothBlue');
+    }
   }
   // head: four-sail rotor in the x/y plane, hub at the pivot (1.5 world) so it spins about z.
   const n = 27;
   const c = 13;
   const head = new VoxelModel(n, n, 6);
   const sailLen = level >= 2 ? 13 : 11;
+  const sail = level >= 4 ? (branch === 'B' ? 'stoneLight' : 'clothBlue') : 'sail';
+  const sailWidth = level >= 4 && branch !== 'B' ? 4 : 3;
   for (let k = 0; k < 4; k++) {
     const dx = [1, 0, -1, 0][k]!, dy = [0, 1, 0, -1][k]!;
     for (let i = 2; i <= sailLen; i++) {
@@ -269,7 +317,7 @@ function windTower(level: TowerLevel): TowerParts {
       head.set(x, y, 3, 'woodDark');
       // sail cloth to one side of each spar
       const sx = -dy, sy = dx;
-      if (i >= 4) for (let w = 1; w <= 3; w++) head.set(x + sx * w, y + sy * w, 3, (i + w) % 3 === 0 ? 'sailShade' : 'sail');
+      if (i >= 4) for (let w = 1; w <= sailWidth; w++) head.set(x + sx * w, y + sy * w, 3, (i + w) % 3 === 0 ? 'sailShade' : sail);
     }
   }
   head.box(c - 1, c - 1, 1, c + 1, c + 1, 5, level >= 3 ? 'gold' : 'iron');
@@ -284,12 +332,13 @@ function windTower(level: TowerLevel): TowerParts {
 }
 
 const cache = new Map<string, TowerParts>();
-export function towerParts(kind: TowerKind, level: TowerLevel): TowerParts {
-  const key = `${kind}:${level}`;
+export function towerParts(kind: TowerKind, level: TowerLevel, branch?: TowerBranch): TowerParts {
+  const b = level >= 4 ? branch ?? 'A' : undefined;
+  const key = `${kind}:${level}:${b ?? ''}`;
   let p = cache.get(key);
   if (!p) {
-    p = kind === 'arrow' ? arrowTower(level) : kind === 'frost' ? frostTower(level) : kind === 'cannon' ? cannonTower(level)
-      : kind === 'lightning' ? lightningTower(level) : windTower(level);
+    p = kind === 'arrow' ? arrowTower(level, b) : kind === 'frost' ? frostTower(level, b) : kind === 'cannon' ? cannonTower(level, b)
+      : kind === 'lightning' ? lightningTower(level, b) : windTower(level, b);
     cache.set(key, p);
   }
   return p;

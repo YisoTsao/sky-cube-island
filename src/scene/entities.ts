@@ -1,5 +1,5 @@
 import { Group, Mesh, Vector3, type BufferGeometry } from 'three';
-import type { EnemyKind, TowerKind, TowerLevel } from '../domain/types';
+import type { EnemyKind, TowerBranch, TowerKind, TowerLevel } from '../domain/types';
 import { towerParts } from './models/towers';
 import { enemyGeometry, trapGeometry, wallGeometry } from './models/props';
 import { createVoxelMaterial, type VoxelMaterial } from './materials/voxel-material';
@@ -25,6 +25,7 @@ export class TowerView {
   private headMesh!: Mesh;
   private bodyMeshes: Mesh[] = [];
   level: TowerLevel = 1;
+  branch?: TowerBranch;
   private buildT = 1;
   private recoil = 0;
   private aimYaw = 0;
@@ -35,20 +36,21 @@ export class TowerView {
   blockedT = 0;
   headY = 1.6;
 
-  constructor(readonly id: string, readonly kind: TowerKind, center: Vector3, level: TowerLevel, animate: boolean) {
+  constructor(readonly id: string, readonly kind: TowerKind, center: Vector3, level: TowerLevel, animate: boolean, branch?: TowerBranch) {
     this.group.position.copy(center);
     this.group.add(this.inner);
     this.inner.add(this.head);
-    this.setLevel(level, false);
+    this.setLevel(level, false, branch);
     if (animate) this.buildT = 0;
   }
 
-  setLevel(level: TowerLevel, pop: boolean) {
+  setLevel(level: TowerLevel, pop: boolean, branch?: TowerBranch) {
     this.level = level;
+    this.branch = branch;
     for (const m of this.bodyMeshes) this.inner.remove(m);
     this.bodyMeshes = [];
     if (this.headMesh) this.head.remove(this.headMesh);
-    const parts = towerParts(this.kind, level);
+    const parts = towerParts(this.kind, level, branch);
     const mats = towerMats();
     const add = (geo: BufferGeometry | undefined, mat: VoxelMaterial, shadow = true) => {
       if (!geo) return;

@@ -3,7 +3,7 @@ import {
   Color, CanvasTexture, Sprite, SpriteMaterial, type BufferGeometry,
 } from 'three';
 import type { CellId, EnemyInstance, EnemyKind, GameEvent, GameState, LevelDef } from '../domain/types';
-import { ENEMY_DEFS, LEVEL_RANGE_BONUS, TOWER_DEFS, isBurrowed, isEnraged, towerStats } from '../domain/definitions';
+import { ENEMY_DEFS, TOWER_DEFS, isBurrowed, isEnraged, levelRangeBonus, towerStats } from '../domain/definitions';
 import { HEIGHT_STEP_WORLD } from '../domain/types';
 import type { PreviewInfo, RangeCell, SceneFeed } from '../presentation/feed';
 import { RenderPipeline, QUALITY, type QualityLevel } from './render/pipeline';
@@ -465,11 +465,11 @@ export class SceneApp {
       seen.add(t.id);
       let v = this.towers.get(t.id);
       if (!v) {
-        v = new TowerView(t.id, t.kind, this.towerCenter(t.anchorCellId), t.level, animate);
+        v = new TowerView(t.id, t.kind, this.towerCenter(t.anchorCellId), t.level, animate, t.branch);
         this.scene.add(v.group);
         this.towers.set(t.id, v);
         if (animate) this.vfx.dust(v.group.position, 1.4, 22);
-      } else if (v.level !== t.level) v.setLevel(t.level, animate);
+      } else if (v.level !== t.level || v.branch !== t.branch) v.setLevel(t.level, animate, t.branch);
     }
     for (const [id, v] of this.towers) if (!seen.has(id)) { this.scene.remove(v.group); this.towers.delete(id); }
     const wseen = new Set<string>();
@@ -688,7 +688,7 @@ export class SceneApp {
             const g = this.groundAt(at.x, at.z);
             if (g > -50) this.vfx.scorch(new Vector3(at.x, g, at.z));
             const tw = ctx.state.towers.find((x) => x.id === e.towerId);
-            const radius = tw ? towerStats(tw.kind, tw.level).blastRadiusWorld ?? 1.05 : 1.05;
+            const radius = tw ? towerStats(tw.kind, tw.level, tw.branch).blastRadiusWorld ?? 1.05 : 1.05;
             this.vfx.ring(new Vector3(at.x, g, at.z), radius + 0.05, 'lantern', 0.35);
             this.rig.addTrauma(0.12);
           });
@@ -706,7 +706,7 @@ export class SceneApp {
           const t = this.towers.get(e.towerId);
           if (!t) break;
           const tw = ctx.state.towers.find((x) => x.id === e.towerId);
-          const r = TOWER_DEFS.wind.baseRangeWorld + (tw ? LEVEL_RANGE_BONUS[tw.level] : 0);
+          const r = TOWER_DEFS.wind.baseRangeWorld + (tw ? levelRangeBonus(tw.level, tw.kind, tw.branch) : 0);
           this.vfx.gust(t.group.position, r, reduced ? 10 : 26);
           this.vfx.ring(t.group.position, r, 'cloud', 0.45);
           break;

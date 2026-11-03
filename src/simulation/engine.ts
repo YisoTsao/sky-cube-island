@@ -2,7 +2,7 @@ import type {
   CellId, EnemyInstance, GameEvent, GameState, LevelDef, TargetingMode, TowerInstance, Vec3,
 } from '../domain/types';
 import { HEIGHT_STEP_WORLD } from '../domain/types';
-import { ENEMY_DEFS, TOWER_DEFS, TPS, TRAP_DEF, isBurrowed, isEnraged, starsForHp, towerStats, waveHpMultiplier } from '../domain/definitions';
+import { ENEMY_DEFS, TOWER_DEFS, TPS, TRAP_DEF, isBurrowed, isEnraged, starsForHp, towerStats, waveHpMultiplier, type TowerLevelStats } from '../domain/definitions';
 import { buildNavigationGraph } from '../navigation/build-graph';
 import { findPathToCore } from '../navigation/astar';
 
@@ -167,6 +167,7 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
   for (const e of enemies) {
     if (e.state !== 'moving') continue;
     const def = ENEMY_DEFS[e.kind];
+    if ((e.stunUntilTick ?? -1) > tick) continue; // frozen / stunned in place
     const slowRatio = e.slowUntilTick > tick ? (e.slowRatio ?? TOWER_DEFS.frost.slow?.ratio ?? 0) * (1 - (def.slowResistance ?? 0)) : 0;
     const rage = isEnraged(e) ? def.enrage!.speedMult : 1;
     if (def.breaksWalls) {
@@ -218,7 +219,7 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
   // 3b. Healer auras: every `everyTicks` since spawn, restore a flat amount of HP to nearby allies.
   for (const h of enemies) {
     const aura = ENEMY_DEFS[h.kind].healAura;
-    if (!aura || h.state !== 'moving') continue;
+    if (!aura || h.state !== 'moving' || (h.disruptedUntilTick ?? -1) > tick) continue;
     const age = tick - h.spawnTick;
     if (age <= 0 || age % aura.everyTicks !== 0) continue;
     const hp = aimPoint(map, h).p;
@@ -234,7 +235,7 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
   }
 
   // Shield auras: damage reduction for allies standing near a living shaman (not the shaman itself).
-  const shamans = enemies.filter((e) => ENEMY_DEFS[e.kind].shieldAura && e.state === 'moving' && !isBurrowed(e, tick));
+  const shamans = enemies.filter((e) => ENEMY_DEFS[e.kind].shieldAura && e.state === 'moving' && !isBurrowed(e, tick) && (e.disruptedUntilTick ?? -1) <= tick);
   const shielding = (v: EnemyInstance): number => {
     let best = 0;
     if (!shamans.length) return 0;
@@ -249,22 +250,49 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
 
   // Applies one hit from a tower or trap (resistances, shields, slow, rebirth, death gold, splitting).
   type HitSource = { id: string; damageType: 'physical' | 'magic'; slow?: { ratio: number; durationTicks: number } };
-  type HitDef = Omit<HitSource, 'id'>;
-  const applyHit = (t: TowerInstance | HitSource, v: EnemyInstance, raw: number): void => {
-    const def: HitDef = 'kind' in t ? { damageType: TOWER_DEFS[t.kind].damageType, slow: towerStats(t.kind, t.level).slow } : t;
+  type HitDef = Omit<HitSource, 'id'> & Pick<TowerLevelStats, 'armorPierce' | 'flyerBonus' | 'freeze' | 'stunTicks' | 'shred' | 'disruptTicks'>;
+  const statsCache = new Map<string, TowerLevelStats>();
+  const statsOf = (t: TowerInstance): TowerLevelStats => {
+    let st = statsCache.get(t.id);
+    if (!st) { st = towerStats(t.kind, t.level, t.branch); statsCache.set(t.id, st); }
+    return st;
+  };
+  const applyHit = (t: TowerInstance | HitSource, v: EnemyInstance, raw: number, slowOverride?: HitDef['slow']): void => {
+    const def: HitDef = 'kind' in t ? { damageType: TOWER_DEFS[t.kind].damageType, ...statsOf(t) } : t;
+    const slow = slowOverride ?? def.slow;
     const edef = ENEMY_DEFS[v.kind];
-    const resist = def.damageType === 'physical' ? edef.physicalResistance : (edef.magicResistance ?? 0);
+    let resist = def.damageType === 'physical' ? edef.physicalResistance : (edef.magicResistance ?? 0);
+    if (def.damageType === 'physical' && def.armorPierce) resist *= 1 - def.armorPierce;
+    if ((v.shredUntilTick ?? -1) > tick) resist = Math.max(0, resist - (v.shredAmount ?? 0));
+    if (def.flyerBonus && edef.flying) raw *= 1 + def.flyerBonus;
     const shield = shielding(v);
     const resisted = resist > 0 || shield > 0;
     const amount = Math.max(0, Math.round(raw * (1 - resist) * (1 - shield)));
     v.hp = Math.max(0, v.hp - amount);
     events.push({ type: 'ENEMY_DAMAGED', tick, enemyId: v.id, sourceTowerId: t.id, amount, damageType: def.damageType, resisted, hpAfter: v.hp });
-    if (def.slow && v.hp > 0) {
+    if (slow && v.hp > 0) {
       // a weaker slow never overrides a stronger one that is still running
-      const active = v.slowUntilTick > tick ? (v.slowRatio ?? 0) : 0;
-      v.slowRatio = Math.max(active, def.slow.ratio);
-      v.slowUntilTick = tick + def.slow.durationTicks;
-      events.push({ type: 'ENEMY_SLOWED', tick, enemyId: v.id, untilTick: v.slowUntilTick });
+      const active = v.slowUntilTick > tick ? (v.slowRatio ?? TOWER_DEFS.frost.slow!.ratio) : 0;
+      if (slow.ratio >= active) {
+        v.slowRatio = slow.ratio;
+        v.slowUntilTick = tick + slow.durationTicks;
+        events.push({ type: 'ENEMY_SLOWED', tick, enemyId: v.id, untilTick: v.slowUntilTick });
+      }
+    }
+    if (v.hp > 0) {
+      if (def.freeze) {
+        v.frostHits = (v.frostHits ?? 0) + 1;
+        if (v.frostHits % def.freeze.every === 0) {
+          const ticks = Math.round(def.freeze.ticks * (1 - (edef.slowResistance ?? 0)));
+          if (ticks > 0) v.stunUntilTick = Math.max(v.stunUntilTick ?? -1, tick + ticks);
+        }
+      }
+      if (def.stunTicks) {
+        const ticks = Math.round(def.stunTicks * (1 - (edef.knockbackResistance ?? 0)));
+        if (ticks > 0) v.stunUntilTick = Math.max(v.stunUntilTick ?? -1, tick + ticks);
+      }
+      if (def.shred) { v.shredUntilTick = tick + def.shred.ticks; v.shredAmount = Math.max(v.shredAmount ?? 0, def.shred.amount); }
+      if (def.disruptTicks && (edef.healAura || edef.shieldAura)) v.disruptedUntilTick = tick + def.disruptTicks;
     }
     if (v.hp <= 0 && edef.rebirth && !v.reborn) {
       // First death: rise again on the spot (no gold yet).
@@ -319,7 +347,7 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
       const { p, pose } = aimPoint(map, e);
       const enemyElev = map.elevationOf(pose.nearestCell);
       const d = distance3D(geo.origin, p);
-      if (d > effectiveRange(t.kind, t.level, geo.elevation, enemyElev)) continue;
+      if (d > effectiveRange(t.kind, t.level, geo.elevation, enemyElev, t.branch)) continue;
       inRangeCount++;
       const exclude = new Set(geo.exclude);
       exclude.add(pose.fromCell);
@@ -333,9 +361,9 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
     }
     candidates.sort(TARGET_ORDER[t.targeting ?? 'FIRST']);
     const target = candidates[0]!;
-    t.cooldownTicks = def.cooldownTicks;
+    const lv = statsOf(t);
+    t.cooldownTicks = lv.cooldownTicks;
     events.push({ type: 'TOWER_FIRED', tick, towerId: t.id, targetId: target.e.id, travelTicks: def.projectileTicks });
-    const lv = towerStats(t.kind, t.level);
     const raw = lv.damage;
 
     if (lv.blastRadiusWorld) {
@@ -366,7 +394,7 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
         from = best.p;
       }
       events.push({ type: 'LIGHTNING_CHAINED', tick, towerId: t.id, hitIds: hit.map((h) => h.e.id), points: [geo.origin, ...hit.map((h) => h.p)] });
-      hit.forEach((h, k) => applyHit(t, h.e, raw * Math.pow(def.chain!.falloff, k)));
+      hit.forEach((h, k) => applyHit(t, h.e, raw * Math.pow(lv.chainFalloff ?? def.chain!.falloff, k)));
     } else if (def.knockback) {
       // Wind gust: hit several enemies in range, then push the survivors back along their route.
       const kb = def.knockback;
@@ -374,7 +402,7 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
       events.push({ type: 'WIND_GUST', tick, towerId: t.id, hitIds: victims.map((v) => v.id) });
       const push = lv.knockbackCells!;
       for (const v of victims) {
-        applyHit(t, v, raw);
+        applyHit(t, v, raw, lv.gustSlow);
         if (v.state !== 'moving' || (v.pushImmuneUntilTick ?? -1) > tick) continue;
         const cells = push * (1 - (ENEMY_DEFS[v.kind].knockbackResistance ?? 0)) / (v.flightDist ?? 1);
         if (cells <= 0) continue;
@@ -386,6 +414,13 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
       }
     } else {
       applyHit(t, target.e, raw);
+      if (lv.splash) {
+        // Lv4 blizzard: nearby enemies take part of the hit and the same slow
+        for (const e of enemies) {
+          if (e === target.e || e.state !== 'moving' || isBurrowed(e, tick)) continue;
+          if (distance3D(aimPoint(map, e).p, target.p) <= lv.splash.radiusWorld) applyHit(t, e, raw * lv.splash.damageRatio);
+        }
+      }
     }
   }
 

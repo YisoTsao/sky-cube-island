@@ -80,7 +80,8 @@ export const GameStateSchema = z.object({
   towers: z.array(z.object({
     id: z.string(), kind: towerKind, anchorCellId: z.string(),
     footprintCellIds: z.array(z.string()).length(4),
-    level: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+    level: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+    branch: z.enum(['A', 'B']).optional(),
     cooldownTicks: z.number().int().min(0), investedGold: z.number().int().min(0),
     targeting: z.enum(['FIRST', 'LAST', 'STRONGEST', 'CLOSEST']), builtWave: z.number().int().min(0),
   })),
