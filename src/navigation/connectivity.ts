@@ -10,7 +10,7 @@ export type RouteValidation =
   | { ok: false; code: Extract<RejectionCode, 'NO_ROUTE_FROM_PORTAL' | 'ROUTE_TOO_LONG'>; portalId: string; routes: RouteMap };
 
 /** Check EACH portal reaches ANY core approach within maxShortestPathCost (Tech §6.3). */
-export function computeRoutes(level: LevelDef, state: Pick<GameState, 'editedElevations' | 'towers' | 'walls'>): RouteValidation {
+export function computeRoutes(level: LevelDef, state: Pick<GameState, 'editedElevations' | 'towers' | 'walls' | 'brokenConnectors'>): RouteValidation {
   const map = deriveMap(level, state);
   const graph = buildNavigationGraph(map);
   const routes: RouteMap = {};

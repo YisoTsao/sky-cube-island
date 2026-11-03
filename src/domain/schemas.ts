@@ -3,7 +3,7 @@ import { z } from 'zod';
 const elevation = z.number().int().min(0).max(6);
 const gridPos = z.object({ x: z.number().int(), z: z.number().int() });
 const towerKind = z.enum(['arrow', 'frost', 'cannon', 'lightning', 'wind']);
-const enemyKind = z.enum(['slime', 'runner', 'golem', 'mini', 'splitter', 'knight', 'wisp', 'boss', 'boar', 'ghost', 'crab', 'mole', 'salamander', 'queen', 'bat', 'yeti', 'shaman', 'frostGiant', 'imp', 'phoenix']);
+const enemyKind = z.enum(['slime', 'runner', 'golem', 'mini', 'splitter', 'knight', 'wisp', 'boss', 'boar', 'ghost', 'crab', 'mole', 'salamander', 'queen', 'bat', 'yeti', 'shaman', 'frostGiant', 'imp', 'phoenix', 'wyvern', 'ram']);
 
 export const SurfaceCellSchema = z.object({
   id: z.string().min(1),
@@ -90,6 +90,8 @@ export const GameStateSchema = z.object({
     wallsPlaced: z.number().int().min(0), terrainEdits: z.number().int().min(0), towersSold: z.number().int().min(0),
     upgrades: z.number().int().min(0), maxTowers: z.number().int().min(0), kindsBuilt: z.array(towerKind),
   }).optional(),
+  traps: z.array(z.object({ id: z.string(), cellId: z.string(), cooldownTicks: z.number().int().min(0) })).optional(),
+  brokenConnectors: z.array(z.string()).optional(),
 });
 
 export const SaveFileSchema = z.object({

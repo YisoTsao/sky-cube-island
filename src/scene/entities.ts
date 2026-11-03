@@ -1,7 +1,7 @@
 import { Group, Mesh, Vector3, type BufferGeometry } from 'three';
 import type { EnemyKind, TowerKind, TowerLevel } from '../domain/types';
 import { towerParts } from './models/towers';
-import { enemyGeometry, wallGeometry } from './models/props';
+import { enemyGeometry, trapGeometry, wallGeometry } from './models/props';
 import { createVoxelMaterial, type VoxelMaterial } from './materials/voxel-material';
 
 const DEPTH_LAYER = 1;
@@ -138,6 +138,7 @@ export class EnemyView {
   burrowed = false;
   /** Boar below its enrage threshold — red tint, faster gait. */
   enraged = false;
+  breaking = false;
   private burrowK = 0;
   lastPos = new Vector3();
   facing = 0;
@@ -154,9 +155,9 @@ export class EnemyView {
     this.body.castShadow = true;
     this.group.add(this.body);
     if (g.extra) {
-      const glowing = kind !== 'runner' && kind !== 'mole' && kind !== 'bat';
+      const glowing = kind !== 'runner' && kind !== 'mole' && kind !== 'bat' && kind !== 'wyvern';
       const extraMat = kind === 'mole' ? createVoxelMaterial({ bevel: 0.012 })
-        : kind === 'bat' ? createVoxelMaterial({ bevel: 0.01 })
+        : kind === 'bat' || kind === 'wyvern' ? createVoxelMaterial({ bevel: 0.01 })
           : glowing ? createVoxelMaterial({ emissiveStrength: kind === 'splitter' || kind === 'queen' ? 1.4 : kind === 'crab' || kind === 'frostGiant' ? 2 : 3 }) : this.mat;
       this.extra = new Mesh(g.extra, extraMat);
       this.extra.castShadow = true;
@@ -180,6 +181,16 @@ export class EnemyView {
       this.body.position.y = 0.35 + bob;
       this.body.scale.setScalar(1 + s * 0.12);
       if (this.extra) { this.extra.position.y = this.body.position.y; this.extra.scale.set(1, 1 + Math.sin(this.t * 26) * 0.9, 1); }
+    } else if (this.kind === 'wyvern') {
+      const bob = Math.sin(this.t * 2.6) * 0.1;
+      this.body.position.y = bob;
+      this.body.rotation.x = Math.sin(this.t * 2.6 + 1) * 0.08;
+      this.body.scale.setScalar(1 + s * 0.08);
+      if (this.extra) { this.extra.position.y = bob; this.extra.rotation.x = this.body.rotation.x; this.extra.scale.set(1, 1 + Math.sin(this.t * 9) * 0.7, 1); }
+    } else if (this.kind === 'ram') {
+      const f = this.breaking ? 18 : 8;
+      this.body.position.y = Math.abs(Math.sin(this.t * f)) * (this.breaking ? 0.02 : 0.05);
+      this.body.rotation.x = this.breaking ? 0.18 + Math.sin(this.t * f) * 0.12 : Math.sin(this.t * f) * 0.04 - s * 0.2;
     } else if (this.kind === 'phoenix') {
       const bob = Math.sin(this.t * 2.2) * 0.1;
       this.body.position.y = 0.25 + bob;
@@ -276,5 +287,35 @@ export class WallView {
     }
     this.group.position.y = by;
     return false;
+  }
+}
+
+const trapGeo = { g: null as ReturnType<typeof trapGeometry> | null };
+/** Spike plate flush with the path; the spikes pop up for a moment when it fires. */
+export class TrapView {
+  readonly group = new Group();
+  private spikes: Mesh;
+  private pop = 0;
+  constructor(readonly id: string, readonly cellId: string, pos: Vector3) {
+    trapGeo.g ??= trapGeometry();
+    const plate = new Mesh(trapGeo.g.plate, towerMats().body);
+    plate.receiveShadow = true;
+    this.spikes = new Mesh(trapGeo.g.spikes, towerMats().body);
+    this.spikes.castShadow = true;
+    this.group.add(plate, this.spikes);
+    this.group.position.copy(pos).add(new Vector3(0, 0.005, 0));
+    this.setPop();
+  }
+  trigger() { this.pop = 1; }
+  setY(y: number) { this.group.position.y = y + 0.005; }
+  private setPop() {
+    const k = this.pop > 0.7 ? 1 : this.pop / 0.7;
+    this.spikes.position.y = -0.3 + k * 0.32;
+    this.spikes.visible = k > 0.02;
+  }
+  update(dt: number) {
+    if (this.pop <= 0) return;
+    this.pop = Math.max(0, this.pop - dt / 0.45);
+    this.setPop();
   }
 }

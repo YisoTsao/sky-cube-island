@@ -63,11 +63,13 @@ export const TARGETING_MODES: readonly TargetingMode[] = ['FIRST', 'LAST', 'STRO
 export type EnemyKind =
   | 'slime' | 'runner' | 'golem' | 'mini' | 'splitter' | 'knight' | 'wisp' | 'boss'
   | 'boar' | 'ghost' | 'crab' | 'mole' | 'salamander' | 'queen'
-  | 'bat' | 'yeti' | 'shaman' | 'frostGiant' | 'imp' | 'phoenix';
+  | 'bat' | 'yeti' | 'shaman' | 'frostGiant' | 'imp' | 'phoenix'
+  | 'wyvern' | 'ram';
 export const ENEMY_KINDS: readonly EnemyKind[] = [
   'slime', 'runner', 'golem', 'mini', 'splitter', 'knight', 'wisp', 'boss',
   'boar', 'ghost', 'crab', 'mole', 'salamander', 'queen',
   'bat', 'yeti', 'shaman', 'frostGiant', 'imp', 'phoenix',
+  'wyvern', 'ram',
 ];
 
 export interface SpawnEntry {
@@ -171,7 +173,16 @@ export interface EnemyDef {
   knockbackResistance?: number;
   /** Presentation hint: model scale + HP bar width. */
   scale?: number;
+  /** Flies straight from its portal to the nearest core approach, `altitudeWorld` above the
+   *  interpolated ground height: ignores terrain, walls, bridges and traps (GDD §16 T2). */
+  flying?: { altitudeWorld: number };
+  /** Plans its route as if wooden walls were not there and smashes each wall in its way
+   *  after standing at it for `ticks` (GDD §16 T2 「拆路障怪」). */
+  breaksWalls?: { ticks: number };
 }
+
+/** 1×1 spike trap (GDD §16 T2): sits on a walkable cell without blocking it. */
+export interface TrapInstance { id: string; cellId: CellId; cooldownTicks: number }
 
 export type GamePhase = 'MENU' | 'PREPARE' | 'COMBAT' | 'WAVE_RESULT' | 'VICTORY' | 'DEFEAT';
 
@@ -209,6 +220,10 @@ export interface EnemyInstance {
   reborn?: boolean;
   /** Wind knockback cannot hit again before this tick. */
   pushImmuneUntilTick?: number;
+  /** Flyers: straight-line length of their two-node flight path (segment speed is divided by it). */
+  flightDist?: number;
+  /** Wall breakers: ticks spent hammering the wall in front of them. */
+  breakingTicks?: number;
 }
 
 /** Per-portal spawn queue entry, materialised at START_WAVE (D21-07). */
@@ -241,6 +256,10 @@ export interface GameState {
   frozenRoutes: Record<string, CellId[]>;
   /** Read-only run log for optional challenges (never read by the simulation). */
   run?: RunLog;
+  /** 1×1 spike traps (GDD §16 T2). */
+  traps?: TrapInstance[];
+  /** Connectors the player has collapsed this run; their decks are not walkable (GDD §16 T2). */
+  brokenConnectors?: string[];
 }
 
 export type GameCommand =
@@ -251,6 +270,9 @@ export type GameCommand =
   | { type: 'UPGRADE_TOWER'; towerId: string }
   | { type: 'SELL_TOWER'; towerId: string }
   | { type: 'SET_TARGETING'; towerId: string; targeting: TargetingMode }
+  | { type: 'PLACE_TRAP'; cellId: CellId }
+  | { type: 'REMOVE_TRAP'; trapId: string }
+  | { type: 'TOGGLE_BRIDGE'; connectorId: string }
   | { type: 'UNDO_PREPARE' }
   | { type: 'START_WAVE' }
   | { type: 'CONTINUE' };
@@ -261,7 +283,7 @@ export type RejectionCode =
   | 'PROTECTED_CONNECTOR' | 'INSUFFICIENT_GOLD'
   | 'NO_ROUTE_FROM_PORTAL' | 'ROUTE_TOO_LONG'
   | 'NOT_FOUND' | 'INVALID_LEVEL_DATA'
-  | 'NOTHING_TO_UNDO' | 'MAX_LEVEL' | 'ON_ACTIVE_ROUTE';
+  | 'NOTHING_TO_UNDO' | 'MAX_LEVEL' | 'ON_ACTIVE_ROUTE' | 'NOT_A_TRAP_CELL';
 
 export type CommandResult =
   | { ok: true; state: GameState; events: GameEvent[]; cost: number }
@@ -302,6 +324,10 @@ export type GameEvent =
   | { type: 'TOWER_BUILT' | 'TOWER_UPGRADED' | 'TOWER_SOLD'; tick: number; towerId: string;
       kind: TowerKind; level: TowerLevel; anchorCellId: CellId }
   | { type: 'ROUTES_CHANGED'; tick: number; portalIds: string[] }
+  | { type: 'TRAP_PLACED' | 'TRAP_REMOVED'; tick: number; trapId: string; cellId: CellId }
+  | { type: 'TRAP_TRIGGERED'; tick: number; trapId: string; cellId: CellId; hitIds: string[] }
+  | { type: 'WALL_DESTROYED'; tick: number; wallId: string; cellId: CellId; enemyId: string }
+  | { type: 'BRIDGE_COLLAPSED' | 'BRIDGE_REPAIRED'; tick: number; connectorId: string }
   | { type: 'UNDO_APPLIED'; tick: number }
   | { type: 'VICTORY'; tick: number; stars: 1 | 2 | 3 }
   | { type: 'DEFEAT'; tick: number };
@@ -315,4 +341,5 @@ export const ALL_EVENT_TYPES: readonly GameEventType[] = [
   'ENEMY_REACHED_CORE', 'CORE_DAMAGED', 'GOLD_CHANGED', 'TERRAIN_CHANGED', 'WALL_PLACED',
   'WALL_REMOVED', 'TOWER_BUILT', 'TOWER_UPGRADED', 'TOWER_SOLD', 'ROUTES_CHANGED',
   'UNDO_APPLIED', 'VICTORY', 'DEFEAT',
+  'TRAP_PLACED', 'TRAP_REMOVED', 'TRAP_TRIGGERED', 'WALL_DESTROYED', 'BRIDGE_COLLAPSED', 'BRIDGE_REPAIRED',
 ] as const;

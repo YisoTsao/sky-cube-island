@@ -40,6 +40,12 @@ export const SFX_FOR_EVENT: Record<GameEventType, SfxId | 'none' | 'dynamic'> = 
   UNDO_APPLIED: 'undo',
   VICTORY: 'victory',
   DEFEAT: 'defeat',
+  TRAP_PLACED: 'wallPlace',
+  TRAP_REMOVED: 'wallRemove',
+  TRAP_TRIGGERED: 'arrowHit',
+  WALL_DESTROYED: 'explosion',
+  BRIDGE_COLLAPSED: 'explosion',
+  BRIDGE_REPAIRED: 'build',
 };
 
 export const MAX_VOICES: Partial<Record<SfxId, number>> = {

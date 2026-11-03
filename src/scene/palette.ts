@@ -47,6 +47,9 @@ export const PALETTE = {
   frostGiant: 0x9cc6e8, frostGiantDark: 0x5f8fbf, ice: 0xd6f4ff,
   imp: 0xd8452a, impDark: 0x8a2416, impHorn: 0x2e2226, lava: 0xffa21f,
   phoenix: 0xff6a2a, phoenixGold: 0xffc23a, phoenixDeep: 0xc8301e,
+  wyvern: 0x3fa89a, wyvernDark: 0x24706a, wyvernWing: 0x8fe0c8, wyvernBelly: 0xe8d8a0,
+  ram: 0x8a7a6a, ramDark: 0x5a4c40, ramWool: 0xe9e2d2, ramHorn: 0xc9a46a,
+  trap: 0x7c8590, trapDark: 0x4d545e, trapSpike: 0xdfe6ee,
   // terrain themes
   snow: 0xeef4fb, snowLight: 0xffffff, snowShade: 0xd2e0ef, snowSide: 0xdfe9f4,
   pine: 0x2f6b4f, pineDark: 0x214f3a,

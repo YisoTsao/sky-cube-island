@@ -101,7 +101,19 @@ export const ENEMY_DEFS: Record<EnemyKind, EnemyDef> = {
     kind: 'phoenix', name: '不死火鳥', hp: 2200, speedCellsPerSecond: 0.55, coreDamage: 5, goldReward: 150, physicalResistance: 0, magicResistance: 0.3, targetOffsetWorld: 1.0,
     slowResistance: 0.5, rebirth: { hpRatio: 0.6 }, scale: 1.5, knockbackResistance: 0.7,
   },
+  // v2.7 roster (GDD §16 T2): a flyer that ignores the road and a ram that smashes wooden walls.
+  wyvern: {
+    kind: 'wyvern', name: '風翼飛龍', hp: 130, speedCellsPerSecond: 0.9, coreDamage: 2, goldReward: 7, physicalResistance: 0, targetOffsetWorld: 0.4,
+    flying: { altitudeWorld: 1.7 }, knockbackResistance: 0.2,
+  },
+  ram: {
+    kind: 'ram', name: '破牆角獸', hp: 280, speedCellsPerSecond: 0.75, coreDamage: 2, goldReward: 9, physicalResistance: 0.25, targetOffsetWorld: 0.42,
+    breaksWalls: { ticks: 60 }, scale: 1.1, knockbackResistance: 0.4,
+  },
 };
+
+/** 1×1 spike trap (GDD §16 T2): hits every ground enemy standing on its cell, then recharges. */
+export const TRAP_DEF = { cost: 40, refund: 20, damage: 34, damageType: 'physical' as const, cooldownTicks: 20 };
 
 /** GDD §4.4 / §6 terrain economy. */
 export const ECONOMY = {
@@ -110,6 +122,9 @@ export const ECONOMY = {
   wallCost: 15 as const,
   wallRefund: Math.floor(15 * 0.5), // 7
   sellRatio: 0.65,
+  /** Collapsing / repairing a bridge (GDD §16 T2 可破壞／可修復橋梁). */
+  bridgeCollapseCost: 20,
+  bridgeRepairCost: 30,
   maxUndo: 20,
 } as const;
 

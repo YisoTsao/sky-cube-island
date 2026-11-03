@@ -45,6 +45,7 @@ export function buildNavigationGraph(map: DerivedMap): NavigationGraph {
   }
 
   for (const con of index.level.connectors) {
+    if (map.broken.has(con.id)) continue;
     for (let i = 0; i + 1 < con.chain.length; i++) {
       const a = con.chain[i]!;
       const b = con.chain[i + 1]!;

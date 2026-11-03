@@ -2,7 +2,9 @@ import type {
   CellId, EnemyInstance, GameEvent, GameState, LevelDef, TargetingMode, TowerInstance, Vec3,
 } from '../domain/types';
 import { HEIGHT_STEP_WORLD } from '../domain/types';
-import { ENEMY_DEFS, LEVEL_DAMAGE_MULT, TOWER_DEFS, TPS, isBurrowed, isEnraged, starsForHp } from '../domain/definitions';
+import { ENEMY_DEFS, LEVEL_DAMAGE_MULT, TOWER_DEFS, TPS, TRAP_DEF, isBurrowed, isEnraged, starsForHp } from '../domain/definitions';
+import { buildNavigationGraph } from '../navigation/build-graph';
+import { findPathToCore } from '../navigation/astar';
 
 export { isBurrowed, isEnraged };
 import { deriveMap, type DerivedMap } from '../navigation/derived-map';
@@ -55,8 +57,28 @@ export function enemyPose(map: DerivedMap, e: Pick<EnemyInstance, 'pathNodeIds' 
   };
 }
 
-export function remainingDistance(e: Pick<EnemyInstance, 'pathNodeIds' | 'edgeIndex' | 'segmentProgress'>): number {
+export function remainingDistance(e: Pick<EnemyInstance, 'pathNodeIds' | 'edgeIndex' | 'segmentProgress' | 'flightDist'>): number {
+  if (e.flightDist) return (1 - Math.min(1, e.edgeIndex + e.segmentProgress)) * e.flightDist;
   return (e.pathNodeIds.length - 1) - e.edgeIndex - e.segmentProgress;
+}
+
+/** Flyers (GDD §16 T2): a two-node path from the portal straight to the nearest core approach. */
+export function flightPath(level: LevelDef, map: DerivedMap, portalCellId: CellId): { path: CellId[]; dist: number } {
+  const from = map.index.cells.get(portalCellId)!;
+  let best: { id: CellId; d: number } | null = null;
+  for (const id of level.core.approachNodeIds) {
+    const c = map.index.cells.get(id);
+    if (!c) continue;
+    const d = Math.hypot(c.pos.x - from.pos.x, c.pos.z - from.pos.z);
+    if (!best || d < best.d || (d === best.d && id < best.id)) best = { id, d };
+  }
+  return best ? { path: [portalCellId, best.id], dist: Math.max(1, best.d) } : { path: [portalCellId], dist: 1 };
+}
+
+/** Wall breakers plan around towers and terrain but straight through wooden walls. */
+export function breakerPath(level: LevelDef, state: Pick<GameState, 'editedElevations' | 'towers' | 'brokenConnectors'>, portalCellId: CellId): CellId[] | null {
+  const map = deriveMap(level, { ...state, walls: [] });
+  return findPathToCore(buildNavigationGraph(map), map.index, portalCellId, level.core.approachNodeIds)?.nodeIds ?? null;
 }
 
 interface Candidate { e: EnemyInstance; p: Vec3; d: number }
@@ -73,7 +95,8 @@ export const TARGET_ORDER: Record<TargetingMode, (a: Candidate, b: Candidate) =>
 
 function aimPoint(map: DerivedMap, e: EnemyInstance): { p: Vec3; pose: EnemyPose } {
   const pose = enemyPose(map, e);
-  return { p: { x: pose.x, y: pose.elevationF * HEIGHT_STEP_WORLD + ENEMY_DEFS[e.kind].targetOffsetWorld, z: pose.z }, pose };
+  const def = ENEMY_DEFS[e.kind];
+  return { p: { x: pose.x, y: pose.elevationF * HEIGHT_STEP_WORLD + def.targetOffsetWorld + (def.flying?.altitudeWorld ?? 0), z: pose.z }, pose };
 }
 
 /**
@@ -90,19 +113,36 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
   let nextEntityId = state.nextEntityId;
   let spawnCursor = state.spawnCursor;
   const enemies: EnemyInstance[] = state.enemies.map((e) => ({ ...e }));
+  let walls = state.walls;
+  const breakerRoutes = new Map<string, CellId[]>();
 
   const hpScale = level.waves[state.currentWaveIndex]?.hpScale ?? 1;
+  // traps keep some bite in later, tougher waves
+  const hpScaleDamage = Math.max(1, Math.sqrt(hpScale));
   const spawnHp = (kind: EnemyInstance['kind']) => Math.max(1, Math.round(ENEMY_DEFS[kind].hp * hpScale));
 
   // 1. Spawn
   while (spawnCursor < state.spawnQueue.length && state.spawnQueue[spawnCursor]!.tick <= state.waveTick) {
     const item = state.spawnQueue[spawnCursor++]!;
-    const path = state.frozenRoutes[item.portalId];
+    let path = state.frozenRoutes[item.portalId];
     if (!path || path.length === 0) continue;
+    const sdef = ENEMY_DEFS[item.enemyKind];
+    let flightDist: number | undefined;
+    if (sdef.flying) {
+      const f = flightPath(level, map, path[0]!);
+      path = f.path; flightDist = f.dist;
+    } else if (sdef.breaksWalls && walls.length) {
+      path = breakerRoutes.get(item.portalId) ?? (() => {
+        const r = breakerPath(level, state, path![0]!) ?? path!;
+        breakerRoutes.set(item.portalId, r);
+        return r;
+      })();
+    }
     const enemy: EnemyInstance = {
       id: `e${nextEntityId++}`, kind: item.enemyKind, portalId: item.portalId,
       hp: spawnHp(item.enemyKind), maxHp: spawnHp(item.enemyKind), state: 'moving', pathNodeIds: path,
       edgeIndex: 0, segmentProgress: 0, slowUntilTick: -1, spawnTick: tick,
+      ...(flightDist ? { flightDist } : {}),
     };
     enemies.push(enemy);
     events.push({ type: 'ENEMY_SPAWNED', tick, enemyId: enemy.id, kind: enemy.kind, portalId: enemy.portalId });
@@ -114,7 +154,22 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
     const def = ENEMY_DEFS[e.kind];
     const slowRatio = e.slowUntilTick > tick ? (TOWER_DEFS.frost.slow?.ratio ?? 0) * (1 - (def.slowResistance ?? 0)) : 0;
     const rage = isEnraged(e) ? def.enrage!.speedMult : 1;
-    e.segmentProgress += (def.speedCellsPerSecond * rage * (1 - slowRatio)) / TPS;
+    if (def.breaksWalls) {
+      // stop halfway into the cell before a wall and hammer it down
+      const nextId = e.pathNodeIds[e.edgeIndex + 1];
+      const wall = nextId ? walls.find((w) => w.cellId === nextId) : undefined;
+      if (wall && e.segmentProgress >= 0.4) {
+        e.segmentProgress = 0.4;
+        e.breakingTicks = (e.breakingTicks ?? 0) + 1;
+        if (e.breakingTicks >= def.breaksWalls.ticks) {
+          e.breakingTicks = 0;
+          walls = walls.filter((w) => w.id !== wall.id);
+          events.push({ type: 'WALL_DESTROYED', tick, wallId: wall.id, cellId: wall.cellId, enemyId: e.id });
+        }
+        continue;
+      }
+    }
+    e.segmentProgress += (def.speedCellsPerSecond * rage * (1 - slowRatio)) / TPS / (e.flightDist ?? 1);
     while (e.segmentProgress >= 1 && e.edgeIndex < e.pathNodeIds.length - 1) {
       e.segmentProgress -= 1;
       e.edgeIndex += 1;
@@ -131,6 +186,18 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
       });
       events.push({ type: 'CORE_DAMAGED', tick, amount: before - coreHp, hpAfter: coreHp });
     }
+  }
+
+  // 3a. Spike traps: hit every ground enemy standing on the trap cell, then recharge.
+  const trapsNext = (state.traps ?? []).map((t) => ({ ...t, cooldownTicks: Math.max(0, t.cooldownTicks - 1) }));
+  const trapHits: { trap: (typeof trapsNext)[number]; victims: EnemyInstance[] }[] = [];
+  for (const trap of trapsNext) {
+    if (trap.cooldownTicks > 0) continue;
+    const victims = enemies.filter((e) => e.state === 'moving' && !ENEMY_DEFS[e.kind].flying && !isBurrowed(e, tick)
+      && enemyPose(map, e).nearestCell === trap.cellId);
+    if (!victims.length) continue;
+    trap.cooldownTicks = TRAP_DEF.cooldownTicks;
+    trapHits.push({ trap, victims });
   }
 
   // 3b. Healer auras: every `everyTicks` since spawn, restore a flat amount of HP to nearby allies.
@@ -165,9 +232,11 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
     return best;
   };
 
-  // Applies one tower hit (resistances, shields, slow, rebirth, death gold, splitting).
-  const applyHit = (t: TowerInstance, v: EnemyInstance, raw: number): void => {
-    const def = TOWER_DEFS[t.kind];
+  // Applies one hit from a tower or trap (resistances, shields, slow, rebirth, death gold, splitting).
+  type HitSource = { id: string; damageType: 'physical' | 'magic'; slow?: { ratio: number; durationTicks: number } };
+  type HitDef = Omit<HitSource, 'id'>;
+  const applyHit = (t: TowerInstance | HitSource, v: EnemyInstance, raw: number): void => {
+    const def: HitDef = 'kind' in t ? TOWER_DEFS[t.kind] : t;
     const edef = ENEMY_DEFS[v.kind];
     const resist = def.damageType === 'physical' ? edef.physicalResistance : (edef.magicResistance ?? 0);
     const shield = shielding(v);
@@ -202,12 +271,19 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
           id: `e${nextEntityId++}`, kind: edef.splitInto.kind, portalId: v.portalId,
           hp: spawnHp(edef.splitInto.kind), maxHp: spawnHp(edef.splitInto.kind), state: 'moving', pathNodeIds: v.pathNodeIds,
           edgeIndex, segmentProgress: Math.max(0, segmentProgress), slowUntilTick: -1, spawnTick: tick,
+          ...(v.flightDist ? { flightDist: v.flightDist } : {}),
         };
         enemies.push(child);
         events.push({ type: 'ENEMY_SPAWNED', tick, enemyId: child.id, kind: child.kind, portalId: child.portalId });
       }
     }
   };
+
+  for (const { trap, victims } of trapHits) {
+    events.push({ type: 'TRAP_TRIGGERED', tick, trapId: trap.id, cellId: trap.cellId, hitIds: victims.map((v) => v.id) });
+    const src: HitSource = { id: trap.id, damageType: TRAP_DEF.damageType };
+    for (const v of victims) if (v.state === 'moving') applyHit(src, v, TRAP_DEF.damage * hpScaleDamage);
+  }
 
   // 4–5. Towers: cooldown, mode-based targeting with 3D range + LOS, damage resolved this tick.
   const towers: TowerInstance[] = state.towers.map((t) => ({ ...t }));
@@ -281,7 +357,7 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
       for (const v of victims) {
         applyHit(t, v, raw);
         if (v.state !== 'moving' || (v.pushImmuneUntilTick ?? -1) > tick) continue;
-        const cells = push * (1 - (ENEMY_DEFS[v.kind].knockbackResistance ?? 0));
+        const cells = push * (1 - (ENEMY_DEFS[v.kind].knockbackResistance ?? 0)) / (v.flightDist ?? 1);
         if (cells <= 0) continue;
         const along = Math.max(0, v.edgeIndex + v.segmentProgress - cells);
         v.edgeIndex = Math.floor(along);
@@ -297,7 +373,8 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
   const alive = enemies.filter((e) => e.state === 'moving');
   let next: GameState = {
     ...state,
-    gold, coreHp, nextEntityId, spawnCursor, towers, enemies: alive,
+    gold, coreHp, nextEntityId, spawnCursor, towers, enemies: alive, walls,
+    ...(state.traps ? { traps: trapsNext } : {}),
     tick: tick + 1, waveTick: state.waveTick + 1,
   };
 

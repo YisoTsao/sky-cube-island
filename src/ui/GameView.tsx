@@ -261,6 +261,12 @@ export function GameView() {
         let ok: boolean;
         if (t.type === 'build') ok = issue({ type: 'BUILD_TOWER', kind: t.kind, anchorCellId: cellId }, cells);
         else if (t.type === 'wall') ok = issue({ type: 'PLACE_WALL', cellId }, cells);
+        else if (t.type === 'trap') ok = issue({ type: 'PLACE_TRAP', cellId }, cells);
+        else if (t.type === 'bridge') {
+          const con = controller.level.connectors.find((c) => c.chain.includes(cellId!));
+          ok = con ? issue({ type: 'TOGGLE_BRIDGE', connectorId: con.id }, cells) : false;
+          if (!con) useUi.getState().toast('請點選一座橋', 'error');
+        }
         else {
           const cur = controller.elevationOf(cellId);
           ok = issue({ type: 'SET_ELEVATION', cellId, next: (t.type === 'raise' ? cur + 1 : cur - 1) as never }, cells);
@@ -383,6 +389,8 @@ export function GameView() {
       else if (k === 'r') setTool({ type: 'raise' });
       else if (k === 'f') setTool({ type: 'lower' });
       else if (k === 'b') setTool({ type: 'wall' });
+      else if (k === 'j') setTool({ type: 'trap' });
+      else if (k === 'g') setTool({ type: 'bridge' });
       else if (k === 'q') scene.rig.rotate(-1);
       else if (k === 'e') scene.rig.rotate(1);
       else if (k === '=' || k === '+') scene.rig.zoomStep(1);

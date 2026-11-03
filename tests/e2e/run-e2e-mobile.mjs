@@ -87,7 +87,7 @@ async function run(browser, name, device) {
   await page.locator('.dock-tab', { hasText: '地形' }).tap();
   await wait(150);
   const terrain = await page.evaluate(() => [...document.querySelectorAll('.toolbar-group.terrain .tool-btn')].filter((b) => b.getClientRects().length).length);
-  if (terrain !== 3) fail(`${name}: terrain tab shows ${terrain} tools`);
+  if (terrain !== 4) fail(`${name}: terrain tab shows ${terrain} tools`); // raise, lower, wall, trap (L1-01 has no breakable bridge)
   await page.locator('.dock-tab', { hasText: '防禦塔' }).tap();
   await wait(150);
 

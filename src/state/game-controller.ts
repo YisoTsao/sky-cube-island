@@ -1,7 +1,7 @@
 import type {
   CellId, CommandResult, GameCommand, GameEvent, GameState, LevelDef, RuntimeFlags, TowerInstance,
 } from '../domain/types';
-import { STEP_SECONDS, ECONOMY, TOWER_DEFS } from '../domain/definitions';
+import { STEP_SECONDS, ECONOMY, TOWER_DEFS, TRAP_DEF } from '../domain/definitions';
 import { createInitialState, advanceOneTick } from '../simulation/engine';
 import { wavePreview } from '../simulation/waves';
 import { createSession, dispatch, type PrepareSession } from '../session/undo-history';
@@ -141,6 +141,23 @@ export class GameController implements SceneFeed {
         range: anchorOk ? sampleTowerRange(deriveMap(this.level, rangeState), virtual) : undefined,
         towerPreview: { kind: tool.kind, level: 1, anchorCellId: cellId },
       };
+    } else if (tool.type === 'trap') {
+      const r = executeCommand(this.level, s, { type: 'PLACE_TRAP', cellId });
+      info = { tool, cellIds: [cellId], ok: r.ok, cost: TRAP_DEF.cost, message: r.ok ? `放置尖刺陷阱：${TRAP_DEF.cost} 金幣` : r.message };
+    } else if (tool.type === 'bridge') {
+      const con = this.level.connectors.find((c) => c.chain.includes(cellId));
+      if (!con) {
+        info = { tool, cellIds: [cellId], ok: false, cost: 0, message: '請點選一座橋' };
+      } else {
+        const broken = (s.brokenConnectors ?? []).includes(con.id);
+        const cost = broken ? ECONOMY.bridgeRepairCost : ECONOMY.bridgeCollapseCost;
+        const r = executeCommand(this.level, s, { type: 'TOGGLE_BRIDGE', connectorId: con.id });
+        info = {
+          tool, cellIds: [...con.chain], ok: r.ok, cost,
+          message: r.ok ? `${broken ? '修復' : '拆毀'}${con.name}：${cost} 金幣` : r.message,
+          routes: r.ok ? computeRoutes(this.level, r.state).routes : undefined,
+        };
+      }
     } else {
       const cur = this.elevationOf(cellId);
       const cmd: GameCommand = tool.type === 'wall'
