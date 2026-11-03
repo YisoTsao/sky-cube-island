@@ -24,7 +24,7 @@ export const GENERATED_SPECS: GeneratedLevelSpec[] = [
   {
     id: 'L2-01', name: '角獸草原', subtitle: '破牆角獸・木牆擋不住的敵人', theme: 'day', seed: 2103, initialGold: 440,
     layout: { sides: ['N', 'S', 'W'], hubs: ['S'], doubleBridge: ['S'], corners: ['NW', 'SW'], coreElevation: 2, pillars: 2 },
-    plan: { roster: ['slime', 'runner', 'ram', 'bat', 'wyvern', 'splitter', 'boar'], finalBoss: 'queen', waves: 6, density: 1.8, hp: [0.6, 1.4] },
+    plan: { roster: ['slime', 'runner', 'ram', 'bat', 'wyvern', 'splitter', 'boar'], finalBoss: 'queen', waves: 6, density: 1.8, hp: [0.7, 1.75] },
   },
   {
     id: 'L2-02', name: '雙峰吊橋', subtitle: '兩條長橋・拆一座逼敵人繞遠路', theme: 'dusk', weather: 'fog', seed: 2202, initialGold: 460,

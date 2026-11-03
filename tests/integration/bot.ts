@@ -7,7 +7,7 @@ import { computeRoutes } from '../../src/navigation/connectivity';
 import { deriveMap } from '../../src/navigation/derived-map';
 import { sampleTowerRange } from '../../src/navigation/line-of-sight';
 import { ENEMY_DEFS, MAX_TOWER_LEVEL, TOWER_DEFS, upgradeCost } from '../../src/domain/definitions';
-import type { GameState, LevelDef, TowerKind, TowerLevel } from '../../src/domain/types';
+import type { GameState, LevelDef, TowerBranch, TowerKind, TowerLevel } from '../../src/domain/types';
 
 /** Best anchor by visible route-cell coverage (both portals' routes). */
 export function bestAnchor(s: GameState, kind: TowerKind, level: LevelDef = L1, spread = false): { id: string; score: number } | null {
@@ -79,14 +79,14 @@ function spend(s: GameState, o: BotOptions, level: LevelDef): GameState {
     const preferUpgrade = s.towers.length >= o.upgradeAfter && up && s.gold - up.cost >= budgetFloor;
     if (preferUpgrade || !canBuild) {
       if (up && s.gold - up.cost >= budgetFloor) {
-        const r = executeCommand(level, s, { type: 'UPGRADE_TOWER', towerId: up.t.id });
+        const r = executeCommand(level, s, { type: 'UPGRADE_TOWER', towerId: up.t.id, branch: branchFor(up.t.id) });
         if (r.ok) { s = r.state; continue; }
       }
       if (!canBuild) break;
     }
     const b = bestAnchor(s, kind, level, o.spread);
     if (!b || b.score < o.minScore) {
-      if (up && s.gold - up.cost >= budgetFloor) { const r = executeCommand(level, s, { type: 'UPGRADE_TOWER', towerId: up.t.id }); if (r.ok) { s = r.state; continue; } }
+      if (up && s.gold - up.cost >= budgetFloor) { const r = executeCommand(level, s, { type: 'UPGRADE_TOWER', towerId: up.t.id, branch: branchFor(up.t.id) }); if (r.ok) { s = r.state; continue; } }
       break;
     }
     const r = executeCommand(level, s, { type: 'BUILD_TOWER', kind, anchorCellId: b.id });
@@ -98,6 +98,9 @@ function spend(s: GameState, o: BotOptions, level: LevelDef): GameState {
 
 export interface WaveReport { wave: number; seconds: number; leaks: number; leakKinds: Record<string, number>; hpAfter: number; goldAfter: number; enemies: number; towers: string }
 export interface RunReport { result: 'VICTORY' | 'DEFEAT'; coreHp: number; waves: WaveReport[] }
+
+/** Lv4 branch the bots pick: alternate by tower id so both branches see play. */
+const branchFor = (id: string): TowerBranch => (Number(id.replace(/\D/g, '')) % 2 ? 'A' : 'B');
 
 export function runBot(o: BotOptions, level: LevelDef = L1): RunReport {
   let s = createInitialState(level, 7);

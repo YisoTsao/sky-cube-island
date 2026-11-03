@@ -194,7 +194,10 @@ export interface TrapInstance { id: string; cellId: CellId; cooldownTicks: numbe
 
 export type GamePhase = 'MENU' | 'PREPARE' | 'COMBAT' | 'WAVE_RESULT' | 'VICTORY' | 'DEFEAT';
 
-export type TowerLevel = 1 | 2 | 3;
+export type TowerLevel = 1 | 2 | 3 | 4;
+/** Lv4 specialisation, chosen when upgrading from Lv3 (v2.9). */
+export type TowerBranch = 'A' | 'B';
+export const TOWER_BRANCHES: readonly TowerBranch[] = ['A', 'B'];
 
 export interface TowerInstance {
   id: string;
@@ -202,6 +205,8 @@ export interface TowerInstance {
   anchorCellId: CellId;
   footprintCellIds: CellId[];
   level: TowerLevel;
+  /** Lv4 only: which specialisation was chosen. */
+  branch?: TowerBranch;
   cooldownTicks: number;
   investedGold: number;
   targeting: TargetingMode;
@@ -225,6 +230,15 @@ export interface EnemyInstance {
   slowUntilTick: number;
   /** Strength of the current slow (from the frost tower's level). Defaults to the Lv1 ratio. */
   slowRatio?: number;
+  /** Frozen / stunned (Lv4 permafrost, heavy cannon): does not move before this tick. */
+  stunUntilTick?: number;
+  /** Lv4 permafrost: frost hits taken (every Nth hit freezes). */
+  frostHits?: number;
+  /** Lv4 shredder shells: resistances reduced by `shredAmount` before this tick. */
+  shredUntilTick?: number;
+  shredAmount?: number;
+  /** Lv4 overload lightning: healing / shield auras switched off before this tick. */
+  disruptedUntilTick?: number;
   spawnTick: number;
   /** Set once a rebirth enemy has used its revive. */
   reborn?: boolean;
@@ -277,7 +291,7 @@ export type GameCommand =
   | { type: 'PLACE_WALL'; cellId: CellId }
   | { type: 'REMOVE_WALL'; wallId: string }
   | { type: 'BUILD_TOWER'; kind: TowerKind; anchorCellId: CellId }
-  | { type: 'UPGRADE_TOWER'; towerId: string }
+  | { type: 'UPGRADE_TOWER'; towerId: string; /** required when upgrading Lv3 → Lv4 */ branch?: TowerBranch }
   | { type: 'SELL_TOWER'; towerId: string }
   | { type: 'SET_TARGETING'; towerId: string; targeting: TargetingMode }
   | { type: 'PLACE_TRAP'; cellId: CellId }
@@ -293,7 +307,7 @@ export type RejectionCode =
   | 'PROTECTED_CONNECTOR' | 'INSUFFICIENT_GOLD'
   | 'NO_ROUTE_FROM_PORTAL' | 'ROUTE_TOO_LONG'
   | 'NOT_FOUND' | 'INVALID_LEVEL_DATA'
-  | 'NOTHING_TO_UNDO' | 'MAX_LEVEL' | 'ON_ACTIVE_ROUTE' | 'NOT_A_TRAP_CELL';
+  | 'NOTHING_TO_UNDO' | 'MAX_LEVEL' | 'BRANCH_REQUIRED' | 'ON_ACTIVE_ROUTE' | 'NOT_A_TRAP_CELL';
 
 export type CommandResult =
   | { ok: true; state: GameState; events: GameEvent[]; cost: number }
@@ -332,7 +346,7 @@ export type GameEvent =
   | { type: 'TERRAIN_CHANGED'; tick: number; cellId: CellId; from: Elevation; to: Elevation }
   | { type: 'WALL_PLACED' | 'WALL_REMOVED'; tick: number; wallId: string; cellId: CellId }
   | { type: 'TOWER_BUILT' | 'TOWER_UPGRADED' | 'TOWER_SOLD'; tick: number; towerId: string;
-      kind: TowerKind; level: TowerLevel; anchorCellId: CellId }
+      kind: TowerKind; level: TowerLevel; anchorCellId: CellId; branch?: TowerBranch }
   | { type: 'ROUTES_CHANGED'; tick: number; portalIds: string[] }
   | { type: 'TRAP_PLACED' | 'TRAP_REMOVED'; tick: number; trapId: string; cellId: CellId }
   | { type: 'TRAP_TRIGGERED'; tick: number; trapId: string; cellId: CellId; hitIds: string[] }

@@ -1,8 +1,9 @@
 import { useEffect, useState, type ReactElement } from 'react';
-import type { EnemyKind, TargetingMode, TowerKind, TowerLevel } from '../domain/types';
+import type { EnemyKind, TargetingMode, TowerBranch, TowerKind, TowerLevel } from '../domain/types';
+import { TOWER_BRANCHES } from '../domain/types';
 import { TARGETING_MODES, TOWER_KINDS } from '../domain/types';
 import {
-  ECONOMY, ENEMY_DEFS, TRAP_DEF, HIGH_GROUND_PER_LEVEL, LEVEL_RANGE_BONUS, MAX_TOWER_LEVEL, TOWER_DEFS, highGroundBonus, nextTowerLevel, sellRefund, towerStats, upgradeCost,
+  BRANCH_DEFS, ECONOMY, ENEMY_DEFS, TRAP_DEF, HIGH_GROUND_PER_LEVEL, MAX_TOWER_LEVEL, levelRangeBonus, TOWER_DEFS, highGroundBonus, nextTowerLevel, sellRefund, towerStats, upgradeCost,
 } from '../domain/definitions';
 import { controller, level, runtime, syncStore } from '../app/runtime';
 import { executeCommand } from '../commands/execute';
@@ -34,7 +35,8 @@ const TOWER_BLURB: Record<TowerKind, string> = {
   wind: '一次吹中多隻敵人並往回推，拖長牠們待在射程內的時間。頭目幾乎推不動。',
 };
 
-function towerSpecial(kind: TowerKind, lv: TowerLevel = 1): string | null {
+function towerSpecial(kind: TowerKind, lv: TowerLevel = 1, branch?: TowerBranch): string | null {
+  if (lv >= 4) return BRANCH_DEFS[kind][branch ?? 'A'].blurb;
   const st = towerStats(kind, lv);
   if (st.chainJumps !== undefined) return `連鎖 ${st.chainJumps} 次`;
   if (st.knockbackCells !== undefined) return `推退 ${st.knockbackCells.toFixed(1)} 格 · 最多 ${st.knockbackTargets} 隻`;
@@ -282,11 +284,14 @@ function SelectionPanel() {
     const def = TOWER_DEFS[t.kind];
     const elev = controller.elevationOf(t.anchorCellId);
     // range against a target on the same height; high ground only adds range against lower targets
-    const range = def.baseRangeWorld + LEVEL_RANGE_BONUS[t.level];
-    const dmg = Math.round(towerStats(t.kind, t.level).damage);
+    const range = def.baseRangeWorld + levelRangeBonus(t.level, t.kind, t.branch);
+    const dmg = Math.round(towerStats(t.kind, t.level, t.branch).damage);
     const nextLevel = nextTowerLevel(t.level);
     const upCost = nextLevel ? upgradeCost(t.kind, nextLevel) : 0;
-    const next = nextLevel ? { dmg: Math.round(towerStats(t.kind, nextLevel).damage), range: def.baseRangeWorld + LEVEL_RANGE_BONUS[nextLevel], special: towerSpecial(t.kind, nextLevel) } : null;
+    // Lv3 → Lv4 is a choice between two branches, shown as cards instead of a single preview
+    const choosing = nextLevel === MAX_TOWER_LEVEL;
+    const next = nextLevel && !choosing ? { dmg: Math.round(towerStats(t.kind, nextLevel).damage), range: def.baseRangeWorld + levelRangeBonus(nextLevel), special: towerSpecial(t.kind, nextLevel) } : null;
+    const special = towerSpecial(t.kind, t.level, t.branch);
     const hgMax = highGroundBonus(elev);
     const cells = controller.rangeForTower(t.id);
     const blocked = cells.filter((c) => c.state === 'occluded').length;
@@ -296,7 +301,7 @@ function SelectionPanel() {
         <div className="sel-head">
           <TowerIcon kind={t.kind} size={44} />
           <div>
-            <div className="sel-title">{def.name}</div>
+            <div className="sel-title">{def.name}{t.branch && <span className="sel-branch">{BRANCH_DEFS[t.kind][t.branch].name}</span>}</div>
             <div className="sel-level">{'★'.repeat(t.level)}<span>{'★'.repeat(MAX_TOWER_LEVEL - t.level)}</span> Lv.{t.level}</div>
           </div>
           <button className="close-btn" onClick={clearSelection} aria-label="關閉">×</button>
@@ -307,8 +312,8 @@ function SelectionPanel() {
           <div><label>高度</label><b>{elev}</b></div>
           {stats && <div><label>本波擊殺</label><b>{stats.kills}</b></div>}
         </div>
-        {towerSpecial(t.kind, t.level) && (
-          <div className="sel-note">{towerSpecial(t.kind, t.level)}{next?.special && next.special !== towerSpecial(t.kind, t.level) && <span className="sel-next"> → Lv.{nextLevel}：{next.special}</span>}</div>
+        {special && (
+          <div className="sel-note">{special}{next?.special && next.special !== special && <span className="sel-next"> → Lv.{nextLevel}：{next.special}</span>}</div>
         )}
         {towersOpen && (
           <div className="sel-targeting" role="group" aria-label="索敵模式">
@@ -321,9 +326,25 @@ function SelectionPanel() {
         )}
         {hgMax > 0 && <div className="sel-note good">▲ 高地：打比自己低的敵人，每低 1 層射程 +{HIGH_GROUND_PER_LEVEL}（最多 +{hgMax.toFixed(1)}）</div>}
         {blocked > 0 && <div className="sel-note warn">◐ {blocked} 格被地形擋住視線（顯示為斜線）</div>}
+        {towersOpen && choosing && (
+          <div className="sel-branches" role="group" aria-label="Lv4 分支">
+            <div className="sel-branches-head">升到 Lv4，二選一 <span className="btn-cost"><CoinIcon size={14} />{upCost}</span></div>
+            {TOWER_BRANCHES.map((b) => {
+              const bd = BRANCH_DEFS[t.kind][b];
+              return (
+                <button key={b} className="branch-card" disabled={controller.state.gold < upCost}
+                  onClick={() => issue({ type: 'UPGRADE_TOWER', towerId: t.id, branch: b })}>
+                  <b>{bd.name}</b>
+                  <span className="branch-dmg">傷害 {Math.round(towerStats(t.kind, 4, b).damage)}</span>
+                  <span className="branch-blurb">{bd.blurb}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
         {towersOpen && (
           <div className="sel-actions">
-            {nextLevel ? (
+            {choosing ? null : nextLevel ? (
               <button className="btn primary" disabled={controller.state.gold < upCost} onClick={() => issue({ type: 'UPGRADE_TOWER', towerId: t.id })}>
                 升級 <span className="btn-cost"><CoinIcon size={14} />{upCost}</span>
               </button>

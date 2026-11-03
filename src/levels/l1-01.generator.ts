@@ -51,7 +51,7 @@ export const L1_01_WAVES: WaveDef[] = [
     g('splitter', 8, AB, 60, 100),
     g('wisp', 4, AB, 100),
   ] },
-  { id: 'w4', hpScale: 1.8, clearGold: 120, entries: [
+  { id: 'w4', hpScale: 2.03, clearGold: 120, entries: [
     g('slime', 24, AB, 30),
     g('splitter', 10, AB, 60, 100),
     g('knight', 8, AB, 70, 100),
@@ -64,7 +64,7 @@ export const L1_01_WAVES: WaveDef[] = [
     g('knight', 8, AB, 60, 120),
     g('wisp', 6, AB, 70),
   ] },
-  { id: 'w5', hpScale: 2.1, clearGold: 0, entries: [
+  { id: 'w5', hpScale: 2.3, clearGold: 0, entries: [
     g('slime', 18, AB, 30),
     g('runner', 20, AB, 26, 80),
     g('knight', 10, AB, 60, 100),

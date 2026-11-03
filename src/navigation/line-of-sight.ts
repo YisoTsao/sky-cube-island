@@ -1,7 +1,7 @@
-import type { CellId, Elevation, TowerInstance, TowerLevel, Vec3 } from '../domain/types';
+import type { CellId, Elevation, TowerBranch, TowerInstance, TowerLevel, Vec3 } from '../domain/types';
 import { HEIGHT_STEP_WORLD } from '../domain/types';
 import {
-  LEVEL_RANGE_BONUS, PREVIEW_TARGET_OFFSET, TOWER_DEFS, highGroundBonus,
+  PREVIEW_TARGET_OFFSET, TOWER_DEFS, highGroundBonus, levelRangeBonus,
 } from '../domain/definitions';
 import type { DerivedMap } from './derived-map';
 
@@ -64,8 +64,8 @@ export function towerGeometry(map: DerivedMap, tower: Pick<TowerInstance, 'kind'
   };
 }
 
-export function effectiveRange(kind: TowerInstance['kind'], level: TowerLevel, towerElevation: number, enemyElevation: number): number {
-  return TOWER_DEFS[kind].baseRangeWorld + LEVEL_RANGE_BONUS[level] + highGroundBonus(towerElevation - enemyElevation);
+export function effectiveRange(kind: TowerInstance['kind'], level: TowerLevel, towerElevation: number, enemyElevation: number, branch?: TowerBranch): number {
+  return TOWER_DEFS[kind].baseRangeWorld + levelRangeBonus(level, kind, branch) + highGroundBonus(towerElevation - enemyElevation);
 }
 
 export const distance3D = (a: Vec3, b: Vec3): number => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
@@ -79,7 +79,7 @@ export interface RangeCellSample { cellId: CellId; state: RangeSample; highGroun
  */
 export function sampleTowerRange(
   map: DerivedMap,
-  tower: Pick<TowerInstance, 'kind' | 'anchorCellId' | 'footprintCellIds' | 'level'>,
+  tower: Pick<TowerInstance, 'kind' | 'anchorCellId' | 'footprintCellIds' | 'level'> & { branch?: TowerBranch },
 ): RangeCellSample[] {
   const geo = towerGeometry(map, tower);
   const out: RangeCellSample[] = [];
@@ -88,9 +88,9 @@ export function sampleTowerRange(
     const e = map.elevationOf(cell.id);
     const target = { x: cell.pos.x + 0.5, y: e * HEIGHT_STEP_WORLD + PREVIEW_TARGET_OFFSET, z: cell.pos.z + 0.5 };
     const d = distance3D(geo.origin, target);
-    const range = effectiveRange(tower.kind, tower.level, geo.elevation, e);
+    const range = effectiveRange(tower.kind, tower.level, geo.elevation, e, tower.branch);
     if (d > range) { out.push({ cellId: cell.id, state: 'outOfRange', highGroundOnly: false }); continue; }
-    const baseRange = effectiveRange(tower.kind, tower.level, 0, 0);
+    const baseRange = effectiveRange(tower.kind, tower.level, 0, 0, tower.branch);
     const exclude = new Set(geo.exclude);
     exclude.add(cell.id);
     const visible = hasLineOfSight(map, geo.origin, target, exclude);

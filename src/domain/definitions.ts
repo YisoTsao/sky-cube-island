@@ -1,4 +1,4 @@
-import type { EnemyDef, EnemyInstance, EnemyKind, TowerDef, TowerKind, TowerLevel } from './types';
+import type { EnemyDef, EnemyInstance, EnemyKind, TowerBranch, TowerDef, TowerKind, TowerLevel } from './types';
 
 /** Fixed simulation rate (Tech §8.1). */
 export const TPS = 20;
@@ -144,15 +144,16 @@ export const ECONOMY = {
   maxUndo: 20,
 } as const;
 
-/** Highest tower level. Every per-level table below is indexed by level (1-based). */
-export const MAX_TOWER_LEVEL = 3;
-export const TOWER_LEVELS: readonly TowerLevel[] = [1, 2, 3];
+/** Highest tower level. Lv4 is a choice of two specialisations (`BRANCH_DEFS`). */
+export const MAX_TOWER_LEVEL = 4;
+export const TOWER_LEVELS: readonly TowerLevel[] = [1, 2, 3, 4];
 
-/** Level multipliers relative to Lv1 (GDD §7; v2.8 raised 1.3/1.7 → 1.45/2.0 so upgrading pays). */
-export const LEVEL_DAMAGE_MULT: Record<TowerLevel, number> = { 1: 1, 2: 1.45, 3: 2.0 };
-export const LEVEL_RANGE_BONUS: Record<TowerLevel, number> = { 1: 0, 2: 0.2, 3: 0.4 };
+/** Level multipliers relative to Lv1 (GDD §7; v2.8 raised 1.3/1.7 → 1.45/2.0 so upgrading pays).
+ *  Lv4 damage comes from the chosen branch. */
+export const LEVEL_DAMAGE_MULT: Record<TowerLevel, number> = { 1: 1, 2: 1.45, 3: 2.0, 4: 2.0 };
+export const LEVEL_RANGE_BONUS: Record<TowerLevel, number> = { 1: 0, 2: 0.2, 3: 0.4, 4: 0.6 };
 /** Upgrade cost into each level, as a fraction of the build cost. */
-const UPGRADE_COST_RATIO: Partial<Record<TowerLevel, number>> = { 2: 0.7, 3: 1.1 };
+const UPGRADE_COST_RATIO: Partial<Record<TowerLevel, number>> = { 2: 0.7, 3: 1.1, 4: 1.8 };
 
 export function nextTowerLevel(level: TowerLevel): TowerLevel | null {
   return level < MAX_TOWER_LEVEL ? ((level + 1) as TowerLevel) : null;
@@ -162,29 +163,115 @@ export function upgradeCost(kind: TowerKind, toLevel: TowerLevel): number {
   return Math.ceil(TOWER_DEFS[kind].buildCost * (UPGRADE_COST_RATIO[toLevel] ?? 0));
 }
 
+/** One Lv4 specialisation (v2.9). Unset fields keep the tower's Lv3 behaviour. */
+export interface BranchDef {
+  name: string;
+  /** One line shown on the upgrade button. */
+  blurb: string;
+  /** Damage multiplier relative to Lv1 (replaces the Lv3 ×2.0). */
+  damageMult: number;
+  rangeBonus?: number;
+  cooldownTicks?: number;
+  /** Fraction of physical resistance ignored. */
+  armorPierce?: number;
+  /** Extra damage against flyers (0.5 = +50%). */
+  flyerBonus?: number;
+  slowRatio?: number;
+  /** Every `every`-th frost hit freezes the target for `ticks` (× (1 − slow resistance)). */
+  freeze?: { every: number; ticks: number };
+  /** Frost splash: enemies within `radiusWorld` of the target take `damageRatio` of the hit and the slow. */
+  splash?: { radiusWorld: number; damageRatio: number };
+  blastRadiusWorld?: number;
+  /** Cannon stun on every blast victim (× (1 − knock-back resistance)). */
+  stunTicks?: number;
+  /** Resistances reduced by `amount` for `ticks` on every victim. */
+  shred?: { amount: number; ticks: number };
+  chainJumps?: number;
+  chainFalloff?: number;
+  /** Lightning: hit enemies' healing / shield auras stop for `ticks`. */
+  disruptTicks?: number;
+  knockbackCells?: number;
+  knockbackTargets?: number;
+  /** Wind: every gust victim is also slowed. */
+  gustSlow?: { ratio: number; durationTicks: number };
+}
+
+export const BRANCH_DEFS: Record<TowerKind, Record<TowerBranch, BranchDef>> = {
+  arrow: {
+    A: { name: '狙擊弩', blurb: '射程 +1.2、單發重擊、無視一半物抗', damageMult: 2.9, rangeBonus: 1.6, cooldownTicks: 18, armorPierce: 0.5 },
+    B: { name: '連弩', blurb: '射速 ×1.45、對飛行怪傷害 +50%', damageMult: 1.8, cooldownTicks: 11, flyerBonus: 0.5 },
+  },
+  frost: {
+    A: { name: '永凍', blurb: '緩速 55%，每 5 次命中凍結目標 0.8 秒', damageMult: 2.5, slowRatio: 0.55, freeze: { every: 5, ticks: 16 } },
+    B: { name: '冰暴', blurb: '命中時波及周圍敵人（四成傷害）並一起緩速', damageMult: 2.4, slowRatio: 0.45, splash: { radiusWorld: 1.1, damageRatio: 0.4 } },
+  },
+  cannon: {
+    A: { name: '重砲', blurb: '爆炸半徑 1.5、震暈被炸到的敵人', damageMult: 2.5, blastRadiusWorld: 1.5, stunTicks: 8 },
+    B: { name: '碎甲彈', blurb: '被炸到的敵人物抗、魔抗 −25%，持續 4 秒', damageMult: 2.3, blastRadiusWorld: 1.35, shred: { amount: 0.25, ticks: 80 } },
+  },
+  lightning: {
+    A: { name: '雷暴', blurb: '連鎖 5 次，每跳只衰減 15%', damageMult: 2.2, chainJumps: 5, chainFalloff: 0.85 },
+    B: { name: '過載', blurb: '高傷害，打斷治療與護盾光環 5 秒', damageMult: 2.8, chainJumps: 3, disruptTicks: 100 },
+  },
+  wind: {
+    A: { name: '龍捲', blurb: '推退距離 2.6 格、一次吹 7 隻', damageMult: 2.3, knockbackCells: 2.6, knockbackTargets: 7 },
+    B: { name: '颶風', blurb: '一次吹 8 隻，被吹到的敵人緩速 25%', damageMult: 2.3, knockbackCells: 1.5, knockbackTargets: 8, gustSlow: { ratio: 0.25, durationTicks: 50 } },
+  },
+};
+
 /** Everything a tower does at a given level, resolved in one place (simulation, HUD, docs). */
 export interface TowerLevelStats {
   damage: number;
   rangeBonus: number;
+  cooldownTicks: number;
   slow?: { ratio: number; durationTicks: number };
   blastRadiusWorld?: number;
   chainJumps?: number;
+  chainFalloff?: number;
   knockbackCells?: number;
   knockbackTargets?: number;
+  armorPierce?: number;
+  flyerBonus?: number;
+  freeze?: { every: number; ticks: number };
+  splash?: { radiusWorld: number; damageRatio: number };
+  stunTicks?: number;
+  shred?: { amount: number; ticks: number };
+  disruptTicks?: number;
+  gustSlow?: { ratio: number; durationTicks: number };
 }
 
-export function towerStats(kind: TowerKind, level: TowerLevel): TowerLevelStats {
+export function towerStats(kind: TowerKind, level: TowerLevel, branch?: TowerBranch): TowerLevelStats {
   const d = TOWER_DEFS[kind];
-  const i = level - 1;
-  const out: TowerLevelStats = { damage: d.baseDamage * LEVEL_DAMAGE_MULT[level], rangeBonus: LEVEL_RANGE_BONUS[level] };
+  const i = Math.min(level, 3) - 1;
+  const out: TowerLevelStats = { damage: d.baseDamage * LEVEL_DAMAGE_MULT[level], rangeBonus: LEVEL_RANGE_BONUS[level], cooldownTicks: d.cooldownTicks };
   if (d.slow) out.slow = { ratio: d.perLevel?.slowRatio?.[i] ?? d.slow.ratio, durationTicks: d.slow.durationTicks };
   if (d.blastRadiusWorld) out.blastRadiusWorld = d.perLevel?.blastRadiusWorld?.[i] ?? d.blastRadiusWorld;
-  if (d.chain) out.chainJumps = d.chain.jumps + i;
+  if (d.chain) { out.chainJumps = d.chain.jumps + i; out.chainFalloff = d.chain.falloff; }
   if (d.knockback) {
     out.knockbackCells = d.knockback.cells + d.knockback.perLevel * i;
     out.knockbackTargets = d.knockback.maxTargets + i;
   }
+  if (level < 4) return out;
+  const b = BRANCH_DEFS[kind][branch ?? 'A'];
+  out.damage = d.baseDamage * b.damageMult;
+  if (b.rangeBonus !== undefined) out.rangeBonus = b.rangeBonus;
+  if (b.cooldownTicks !== undefined) out.cooldownTicks = b.cooldownTicks;
+  if (b.slowRatio !== undefined && out.slow) out.slow = { ...out.slow, ratio: b.slowRatio };
+  if (b.blastRadiusWorld !== undefined) out.blastRadiusWorld = b.blastRadiusWorld;
+  if (b.chainJumps !== undefined) out.chainJumps = b.chainJumps;
+  if (b.chainFalloff !== undefined) out.chainFalloff = b.chainFalloff;
+  if (b.knockbackCells !== undefined) out.knockbackCells = b.knockbackCells;
+  if (b.knockbackTargets !== undefined) out.knockbackTargets = b.knockbackTargets;
+  for (const k of ['armorPierce', 'flyerBonus', 'freeze', 'splash', 'stunTicks', 'shred', 'disruptTicks', 'gustSlow'] as const) {
+    if (b[k] !== undefined) (out as unknown as Record<string, unknown>)[k] = b[k];
+  }
   return out;
+}
+
+/** Range bonus from the tower's level (and Lv4 branch). */
+export function levelRangeBonus(level: TowerLevel, kind?: TowerKind, branch?: TowerBranch): number {
+  if (level === 4 && kind) return BRANCH_DEFS[kind][branch ?? 'A'].rangeBonus ?? LEVEL_RANGE_BONUS[4];
+  return LEVEL_RANGE_BONUS[level];
 }
 
 /** High-ground range bonus for a tower `elevationDiff` levels above its target (capped). */
