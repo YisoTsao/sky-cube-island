@@ -280,8 +280,56 @@ export function enemyGeometry(kind: EnemyKind): { body: BufferGeometry; extra?: 
     f.box(16, 14, 13, 17, 17, 14, 'phoenixGold');
     return { body: m.build(V * scale), extra: f.build(V * scale, { flags: FLAG_EMISSIVE }), height: 1.0 * scale };
   }
+  if (kind === 'wyvern') {
+    // small teal dragon: long neck, tail and broad membrane wings (wings = extra, flapped by the view)
+    const m = new VoxelModel(12, 12, 22);
+    m.sphere(6, 5, 9, 3.2, 'wyvern', 1, true);
+    m.box(4, 3, 7, 7, 4, 12, 'wyvernBelly');
+    for (let z = 12; z <= 16; z++) m.box(5, 5 + (z - 12), z, 6, 6 + (z - 12), z, 'wyvern');
+    m.box(4, 9, 16, 7, 11, 20, 'wyvern');
+    m.box(5, 9, 21, 6, 10, 21, 'wyvernDark');
+    m.set(4, 11, 19, 'eye'); m.set(7, 11, 19, 'eye');
+    m.box(4, 11, 16, 4, 11, 17, 'horn'); m.box(7, 11, 16, 7, 11, 17, 'horn');
+    for (let z = 0; z < 6; z++) m.box(5, 5 - Math.floor(z / 3), z, 6, 5 - Math.floor(z / 3), z, z % 2 ? 'wyvernDark' : 'wyvern');
+    m.box(4, 0, 8, 4, 2, 9, 'wyvernDark'); m.box(7, 0, 8, 7, 2, 9, 'wyvernDark');
+    const w = new VoxelModel(34, 12, 22);
+    for (let i = 0; i < 12; i++) {
+      const depth = 7 - Math.floor(i / 2);
+      w.box(13 - i, 6 + Math.floor(i / 4), 8, 13 - i, 6 + Math.floor(i / 4), 8 + depth, i % 3 === 0 ? 'wyvernDark' : 'wyvernWing');
+      w.box(20 + i, 6 + Math.floor(i / 4), 8, 20 + i, 6 + Math.floor(i / 4), 8 + depth, i % 3 === 0 ? 'wyvernDark' : 'wyvernWing');
+    }
+    return { body: m.build(V * scale, { originY: 3 * V }), extra: w.build(V * scale, { originY: 3 * V }), height: 0.95 };
+  }
+  if (kind === 'ram') {
+    // woolly battering ram: thick fleece, armoured forehead and big curled horns
+    const m = new VoxelModel(16, 15, 20);
+    for (const [x, z] of [[3, 4], [11, 4], [3, 13], [11, 13]] as const) m.box(x, 0, z, x + 1, 3, z + 1, 'ramDark');
+    m.box(2, 3, 2, 13, 10, 15, 'ramWool', true);
+    m.paint((x, y, z) => (x * 5 + y * 3 + z * 7) % 9 === 0, 'white');
+    m.box(4, 4, 15, 11, 10, 19, 'ram');
+    m.box(4, 9, 17, 11, 11, 19, 'ramDark');
+    m.set(5, 7, 19, 'eye'); m.set(10, 7, 19, 'eye');
+    m.box(6, 4, 19, 9, 5, 19, 'ramDark');
+    for (const sx of [1, 14]) {
+      const dir = sx === 1 ? -1 : 1;
+      m.box(Math.min(sx, sx + dir * 1), 8, 15, Math.max(sx, sx + dir * 1), 12, 17, 'ramHorn');
+      m.box(Math.min(sx, sx + dir * 1), 5, 17, Math.max(sx, sx + dir * 1), 8, 18, 'ramHorn');
+    }
+    return { body: m.build(V * scale), height: 0.75 * scale };
+  }
   if (kind === 'frostGiant') return golemModel(scale, true, true);
   return golemModel(scale, kind === 'boss');
+}
+
+/** Spike trap (陷阱): a flush iron plate (body) and the spikes that shoot up when triggered (extra). */
+export function trapGeometry(): { plate: BufferGeometry; spikes: BufferGeometry } {
+  const m = new VoxelModel(16, 2, 16);
+  m.box(1, 0, 1, 14, 0, 14, 'trapDark');
+  m.box(2, 1, 2, 13, 1, 13, 'trap');
+  for (let x = 3; x <= 12; x += 3) for (let z = 3; z <= 12; z += 3) m.box(x, 1, z, x + 1, 1, z + 1, 'trapDark');
+  const sp = new VoxelModel(16, 7, 16);
+  for (let x = 3; x <= 12; x += 3) for (let z = 3; z <= 12; z += 3) { sp.box(x, 0, z, x + 1, 4, z + 1, 'trapSpike'); sp.set(x, 5, z, 'white'); }
+  return { plate: m.build(V), spikes: sp.build(V) };
 }
 
 /** Wooden barricade with stone footing (路障, 1×1 cell). */

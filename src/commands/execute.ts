@@ -2,7 +2,7 @@ import type {
   CellId, CommandResult, Elevation, GameCommand, GameEvent, GameState, LevelDef, RejectionCode, TowerInstance, TowerKind,
 } from '../domain/types';
 import { MAX_ELEVATION, MIN_ELEVATION } from '../domain/types';
-import { ECONOMY, TOWER_DEFS, sellRefund, upgradeCost } from '../domain/definitions';
+import { ECONOMY, TOWER_DEFS, TRAP_DEF, sellRefund, upgradeCost } from '../domain/definitions';
 import { deriveMap, type DerivedMap } from '../navigation/derived-map';
 import { computeRoutes } from '../navigation/connectivity';
 import { buildSpawnQueue } from '../simulation/waves';
@@ -24,6 +24,7 @@ const MESSAGES: Record<RejectionCode, string> = {
   NOTHING_TO_UNDO: '沒有可以撤銷的操作',
   MAX_LEVEL: '已經是最高等級',
   ON_ACTIVE_ROUTE: '戰鬥中不能把塔蓋在敵人正在走的路線上',
+  NOT_A_TRAP_CELL: '陷阱只能放在可通行的平台地面（不可放在橋、入口、核心旁或建築上）',
 };
 
 /** Tower commands stay available during COMBAT so kill gold can be reinvested mid-wave. */
@@ -155,7 +156,8 @@ function executeRaw(level: LevelDef, state: GameState, cmd: GameCommand): Comman
       if (!fp.ok) return reject(state, fp.code);
       if (state.phase === 'COMBAT') {
         // Frozen routes cannot change mid-wave, so never build on top of them.
-        const onRoute = new Set(Object.values(state.frozenRoutes).flat());
+        // (wall breakers plan their own route at spawn, so live enemies' paths count too)
+        const onRoute = new Set([...Object.values(state.frozenRoutes).flat(), ...state.enemies.flatMap((e) => e.pathNodeIds)]);
         if (fp.cellIds.some((id) => onRoute.has(id))) return reject(state, 'ON_ACTIVE_ROUTE');
       }
       const def = TOWER_DEFS[cmd.kind];
@@ -206,6 +208,53 @@ function executeRaw(level: LevelDef, state: GameState, cmd: GameCommand): Comman
       const draft: GameState = { ...state, towers: state.towers.map((x) => (x.id === t.id ? { ...x, targeting: cmd.targeting } : x)) };
       return { ok: true, state: draft, cost: 0, events: [{ type: 'TOWER_TARGETING_CHANGED', tick, towerId: t.id, targeting: cmd.targeting }] };
     }
+    case 'PLACE_TRAP': {
+      const cell = map.index.cells.get(cmd.cellId);
+      if (!cell) return reject(state, 'OUT_OF_BOUNDS');
+      const traps = state.traps ?? [];
+      if (traps.some((t) => t.cellId === cell.id) || map.occupantOf(cell.id)) return reject(state, 'OCCUPIED');
+      const idx = map.index;
+      if (cell.kind !== 'ground' || cell.terrain === 'water' || idx.connectorCellIds.has(cell.id) || idx.portalCellIds.has(cell.id)
+        || idx.approachIds.has(cell.id) || idx.coreFootprint.has(cell.id)) return reject(state, 'NOT_A_TRAP_CELL');
+      if (state.gold < TRAP_DEF.cost) return reject(state, 'INSUFFICIENT_GOLD');
+      const trapId = `p${state.nextEntityId}`;
+      const draft: GameState = {
+        ...state, gold: state.gold - TRAP_DEF.cost, nextEntityId: state.nextEntityId + 1,
+        traps: [...traps, { id: trapId, cellId: cell.id, cooldownTicks: 0 }],
+      };
+      // traps never block, so routes are unchanged
+      return { ok: true, state: draft, cost: TRAP_DEF.cost, events: [
+        { type: 'TRAP_PLACED', tick, trapId, cellId: cell.id },
+        goldEvent(tick, -TRAP_DEF.cost, draft.gold, 'trap'),
+      ] };
+    }
+    case 'REMOVE_TRAP': {
+      const trap = (state.traps ?? []).find((t) => t.id === cmd.trapId);
+      if (!trap) return reject(state, 'NOT_FOUND');
+      const draft: GameState = { ...state, gold: state.gold + TRAP_DEF.refund, traps: (state.traps ?? []).filter((t) => t.id !== trap.id) };
+      return { ok: true, state: draft, cost: -TRAP_DEF.refund, events: [
+        { type: 'TRAP_REMOVED', tick, trapId: trap.id, cellId: trap.cellId },
+        goldEvent(tick, TRAP_DEF.refund, draft.gold, 'trapRefund'),
+      ] };
+    }
+    case 'TOGGLE_BRIDGE': {
+      const con = level.connectors.find((c) => c.id === cmd.connectorId);
+      if (!con) return reject(state, 'NOT_FOUND');
+      const broken = state.brokenConnectors ?? [];
+      const isBroken = broken.includes(con.id);
+      const cost = isBroken ? ECONOMY.bridgeRepairCost : ECONOMY.bridgeCollapseCost;
+      if (state.gold < cost) return reject(state, 'INSUFFICIENT_GOLD');
+      // nothing may stand on a deck that is about to fall
+      if (!isBroken && (state.traps ?? []).some((t) => con.chain.includes(t.cellId))) return reject(state, 'OCCUPIED');
+      const draft: GameState = {
+        ...state, gold: state.gold - cost,
+        brokenConnectors: isBroken ? broken.filter((id) => id !== con.id) : [...broken, con.id],
+      };
+      return commitWithRoutes(level, state, draft, [
+        { type: isBroken ? 'BRIDGE_REPAIRED' : 'BRIDGE_COLLAPSED', tick, connectorId: con.id },
+        goldEvent(tick, -cost, draft.gold, isBroken ? 'bridgeRepair' : 'bridgeCollapse'),
+      ], cost);
+    }
     case 'START_WAVE': {
       const wave = level.waves[state.currentWaveIndex];
       if (!wave) return reject(state, 'INVALID_LEVEL_DATA');
@@ -219,6 +268,7 @@ function executeRaw(level: LevelDef, state: GameState, cmd: GameCommand): Comman
         spawnQueue: buildSpawnQueue(wave, level.portals.map((p) => p.id)),
         frozenRoutes: routes.routes,
         towers: state.towers.map((t) => ({ ...t, cooldownTicks: 0 })),
+        ...(state.traps ? { traps: state.traps.map((t) => ({ ...t, cooldownTicks: 0 })) } : {}),
       };
       return {
         ok: true, state: draft, cost: 0,

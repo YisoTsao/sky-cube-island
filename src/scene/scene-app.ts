@@ -13,7 +13,7 @@ import { AmbientLife } from './environment/ambient-life';
 import { Terrain } from './terrain/terrain';
 import { TacticalOverlay } from './overlay/overlay';
 import { Vfx } from './vfx/vfx';
-import { TowerView, EnemyView, WallView } from './entities';
+import { TowerView, EnemyView, WallView, TrapView } from './entities';
 import { CoreModel, PortalModel, bridgeGeometry } from './models/landmarks';
 import { treeGeometry, rockGeometry, flowerGeometry, grassTuftGeometry, lanternGeometry, enemyGeometry } from './models/props';
 import { createVoxelMaterial, sharedUniforms } from './materials/voxel-material';
@@ -55,6 +55,8 @@ const ENEMY_SHARDS: Record<string, PaletteKey[]> = {
   frostGiant: ['frostGiant', 'frostGiantDark', 'ice', 'snow'],
   imp: ['imp', 'impDark', 'lava'],
   phoenix: ['phoenix', 'phoenixGold', 'phoenixDeep', 'lava'],
+  wyvern: ['wyvern', 'wyvernDark', 'wyvernWing', 'wyvernBelly'],
+  ram: ['ram', 'ramDark', 'ramWool', 'ramHorn'],
 };
 const BIG_KINDS = new Set<string>(['boss', 'queen', 'frostGiant', 'phoenix']);
 const TOWER_SHARDS: Record<string, PaletteKey[]> = {
@@ -82,6 +84,8 @@ export class SceneApp {
   private portals = new Map<string, PortalModel>();
   private towers = new Map<string, TowerView>();
   private walls = new Map<string, WallView>();
+  private traps = new Map<string, TrapView>();
+  private bridgeDecks = new Map<string, Mesh>();
   private enemies = new Map<string, EnemyView>();
   private dying = new Set<string>();
   private pickMesh: InstancedMesh;
@@ -201,6 +205,7 @@ export class SceneApp {
       mesh.castShadow = true; mesh.receiveShadow = true;
       mesh.layers.enable(RenderPipeline.DEPTH_LAYER);
       this.scene.add(mesh);
+      this.bridgeDecks.set(con.id, mesh);
       // lanterns at both ends, beside the deck
       for (const end of [pts[0]!, pts[pts.length - 1]!]) {
         for (const side of [-0.62, 0.62]) {
@@ -451,7 +456,31 @@ export class SceneApp {
       }
     }
     for (const [id, v] of this.walls) if (!wseen.has(id)) { this.scene.remove(v.group); this.walls.delete(id); }
+    const pseen = new Set<string>();
+    for (const t of s.traps ?? []) {
+      pseen.add(t.id);
+      if (!this.traps.has(t.id)) {
+        const v = new TrapView(t.id, t.cellId, this.cellWorld(t.cellId));
+        this.scene.add(v.group);
+        this.traps.set(t.id, v);
+      }
+    }
+    for (const [id, v] of this.traps) if (!pseen.has(id)) { this.scene.remove(v.group); this.traps.delete(id); }
+    const broken = new Set(s.brokenConnectors ?? []);
+    for (const [id, m] of this.bridgeDecks) m.visible = !broken.has(id);
     this.updateFlowers();
+  }
+
+  /** Splinters falling off a bridge deck (collapse) or settling onto it (repair). */
+  private bridgeBurst(connectorId: string, collapse: boolean) {
+    const con = this.level.connectors.find((c) => c.id === connectorId);
+    if (!con) return;
+    for (const id of con.chain) {
+      const p = this.cellWorld(id);
+      if (collapse) this.vfx.shatter(p.clone().add(new Vector3(0, 0.1, 0)), ['wood', 'woodDark', 'plank'], 10, { speed: 1.2, up: 1.4 });
+      else this.vfx.dust(p, 0.8, 8, 'path');
+    }
+    if (collapse) this.rig.addTrauma(0.12);
   }
 
   private resyncTerrain(animate: boolean) {
@@ -459,18 +488,23 @@ export class SceneApp {
     this.updatePickMesh();
     this.updateFlowers();
     for (const w of this.walls.values()) w.setY(this.cellWorld(w.cellId).y);
+    for (const t of this.traps.values()) t.setY(this.cellWorld(t.cellId).y);
   }
 
   // ---------------------------------------------------------------- director
   private screenOf(p: Vector3) { const s = this.worldToScreen(p); return { x: s.x, y: s.y }; }
 
-  private enemyWorld(e: Pick<EnemyInstance, 'pathNodeIds' | 'edgeIndex' | 'segmentProgress'>, out: Vector3): Vector3 {
+  private enemyWorld(e: Pick<EnemyInstance, 'pathNodeIds' | 'edgeIndex' | 'segmentProgress' | 'kind'>, out: Vector3): Vector3 {
     const last = e.pathNodeIds.length - 1;
     const i = Math.min(e.edgeIndex, last);
     const j = Math.min(i + 1, last);
     const a = this.cellWorld(e.pathNodeIds[i]!);
     const b = this.cellWorld(e.pathNodeIds[j]!);
-    return out.lerpVectors(a, b, i === j ? 0 : e.segmentProgress);
+    out.lerpVectors(a, b, i === j ? 0 : e.segmentProgress);
+    // flyers cruise high above the island; they dip down onto the last stretch before the core
+    const alt = ENEMY_DEFS[e.kind].flying?.altitudeWorld;
+    if (alt) out.y += alt * (i === j ? 0.35 : 1 - Math.max(0, e.segmentProgress - 0.85) / 0.15 * 0.65);
+    return out;
   }
 
   private queue(delaySec: number, fn: () => void) { this.impactQueue.push({ at: this.renderTime + delaySec, fn }); }
@@ -490,6 +524,27 @@ export class SceneApp {
           this.vfx.shatter(p.clone().add(new Vector3(0, -0.2, 0)), ['dirt', 'rock', 'grassDark'], 8, { speed: 1.2, up: 1.2, size: 0.07 });
           break;
         }
+        case 'TRAP_PLACED': case 'TRAP_REMOVED':
+          needSync = true;
+          if (e.type === 'TRAP_PLACED') this.vfx.dust(this.cellWorld(e.cellId), 0.6, 8, 'path');
+          break;
+        case 'TRAP_TRIGGERED': {
+          const v = this.traps.get(e.trapId);
+          if (v) { v.trigger(); if (!reduced) this.vfx.sparks(v.group.position.clone().add(new Vector3(0, 0.25, 0)), 'trapSpike', 8, { speed: 1.4, up: 1.6, life: 0.3, size: 0.04 }); }
+          break;
+        }
+        case 'WALL_DESTROYED': {
+          needSync = true;
+          const p = this.cellWorld(e.cellId);
+          this.vfx.shatter(p.clone().add(new Vector3(0, 0.4, 0)), ['wood', 'woodDark', 'woodLight', 'rock'], 30, { speed: 2.6, up: 2.6 });
+          this.vfx.dust(p, 1.1, 16, 'rock');
+          this.rig.addTrauma(0.2);
+          break;
+        }
+        case 'BRIDGE_COLLAPSED': case 'BRIDGE_REPAIRED':
+          needSync = true; routesChanged = true;
+          this.bridgeBurst(e.connectorId, e.type === 'BRIDGE_COLLAPSED');
+          break;
         case 'WALL_PLACED': case 'WALL_REMOVED': case 'TOWER_BUILT': case 'TOWER_UPGRADED': needSync = true;
           if (e.type === 'TOWER_UPGRADED') {
             const v = this.towers.get(e.towerId);
@@ -683,7 +738,7 @@ export class SceneApp {
       }
     }
     if (ctx.fromUndo || ctx.fromLoad) { this.resyncTerrain(!reduced && ctx.fromUndo); needSync = true; this.core.setHp(ctx.state.coreHp); }
-    if (ctx.fromLoad) { for (const v of this.enemies.values()) this.scene.remove(v.group); this.enemies.clear(); this.towers.forEach((v) => this.scene.remove(v.group)); this.towers.clear(); this.walls.forEach((v) => this.scene.remove(v.group)); this.walls.clear(); }
+    if (ctx.fromLoad) { for (const v of this.enemies.values()) this.scene.remove(v.group); this.enemies.clear(); this.towers.forEach((v) => this.scene.remove(v.group)); this.towers.clear(); this.walls.forEach((v) => this.scene.remove(v.group)); this.walls.clear(); this.traps.forEach((v) => this.scene.remove(v.group)); this.traps.clear(); }
     if (needSync) this.syncEntities(!ctx.fromLoad);
     if (routesChanged) this.refreshRoutes(true);
   }
@@ -739,6 +794,7 @@ export class SceneApp {
     for (const w of this.walls.values()) {
       if (w.update(dtEnv)) { this.vfx.dust(w.group.position, 0.9, 14, 'rock'); this.vfx.ring(w.group.position, 0.9, 'stoneLight', 0.3); this.rig.addTrauma(0.05); }
     }
+    for (const t of this.traps.values()) t.update(dtGame);
     this.updateEnemies(dtGame);
     this.vfx.update(dtGame || dtEnv * (paused ? 0 : 1));
     this.updateOverlay(dtEnv);
@@ -781,6 +837,7 @@ export class SceneApp {
       v.slowed = e.slowUntilTick > s.tick;
       v.burrowed = isBurrowed(e, s.tick);
       v.enraged = isEnraged(e);
+      v.breaking = (e.breakingTicks ?? 0) > 0;
       const maxHp = e.maxHp ?? this.maxHp(e.kind);
       v.hpRatio = e.hp / maxHp;
       v.update(dt, true, v.slowed ? 0.7 : 1);
@@ -819,6 +876,9 @@ export class SceneApp {
       // editable hint for terrain tools
       if (p.tool.type === 'raise' || p.tool.type === 'lower' || p.tool.type === 'wall') {
         for (const c of this.level.cells) if (c.editable && !p.cellIds.includes(c.id)) ov.pushCell(c.id, 0xffe6a0, 0.35, 4, 0.03);
+      }
+      if (p.tool.type === 'bridge') {
+        for (const con of this.level.connectors) for (const c of con.chain) if (!p.cellIds.includes(c)) ov.pushCell(c, 0xffb27a, 0.3, 4, 0.03);
       }
     } else if (this.hoverCell && prepare) {
       ov.pushCell(this.hoverCell, TACTICAL.select, 0.5, 2, 0.04);

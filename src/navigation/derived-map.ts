@@ -65,9 +65,11 @@ export interface DerivedMap {
   occupantOf(cellId: CellId): Occupant | undefined;
   cellAt(x: number, z: number): SurfaceCell | undefined;
   topWorldY(cellId: CellId): number;
+  /** Connectors collapsed by the player (not walkable). */
+  broken: ReadonlySet<string>;
 }
 
-export function deriveMap(level: LevelDef, state: Pick<GameState, 'editedElevations' | 'towers' | 'walls'>): DerivedMap {
+export function deriveMap(level: LevelDef, state: Pick<GameState, 'editedElevations' | 'towers' | 'walls' | 'brokenConnectors'>): DerivedMap {
   const index = indexLevel(level);
   const occ = new Map<CellId, Occupant>();
   for (const id of index.coreFootprint) occ.set(id, { type: 'core' });
@@ -88,6 +90,7 @@ export function deriveMap(level: LevelDef, state: Pick<GameState, 'editedElevati
       return id ? index.cells.get(id) : undefined;
     },
     topWorldY: (id) => elevationOf(id) * HEIGHT_STEP_WORLD,
+    broken: new Set(state.brokenConnectors ?? []),
   };
 }
 

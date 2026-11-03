@@ -34,4 +34,10 @@ export const DIRECTOR_REACTIONS: Record<GameEventType, string> = {
   UNDO_APPLIED: 'rewind: resync terrain/entities with short tween',
   VICTORY: 'camera orbit + stars (HUD)',
   DEFEAT: 'core shatter burst',
+  TRAP_PLACED: 'spike plate drops in + dust',
+  TRAP_REMOVED: 'voxel shatter',
+  TRAP_TRIGGERED: 'spikes shoot up + stone sparks',
+  WALL_DESTROYED: 'wall shatters + dust ring + small shake',
+  BRIDGE_COLLAPSED: 'deck planks shatter and fall into the clouds',
+  BRIDGE_REPAIRED: 'deck rebuilt with dust + sparkle',
 };

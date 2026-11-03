@@ -71,7 +71,7 @@ export function challengeMet(c: ChallengeDef, state: Pick<GameState, 'coreHp' | 
 export function logCommand(run: RunLog | undefined, type: string, after: Pick<GameState, 'towers'>, kind?: TowerKind): RunLog {
   const r: RunLog = { ...(run ?? emptyRunLog()) };
   if (type === 'PLACE_WALL') r.wallsPlaced += 1;
-  else if (type === 'SET_ELEVATION') r.terrainEdits += 1;
+  else if (type === 'SET_ELEVATION' || type === 'TOGGLE_BRIDGE') r.terrainEdits += 1;
   else if (type === 'SELL_TOWER') r.towersSold += 1;
   else if (type === 'UPGRADE_TOWER') r.upgrades += 1;
   else if (type === 'BUILD_TOWER' && kind && !r.kindsBuilt.includes(kind)) r.kindsBuilt = [...r.kindsBuilt, kind];

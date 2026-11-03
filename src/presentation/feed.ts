@@ -7,7 +7,8 @@ export interface RangeCell { cellId: CellId; state: RangeCellState; highGroundOn
 export type Tool =
   | { type: 'none' }
   | { type: 'build'; kind: TowerKind }
-  | { type: 'raise' } | { type: 'lower' } | { type: 'wall' };
+  | { type: 'raise' } | { type: 'lower' } | { type: 'wall' }
+  | { type: 'trap' } | { type: 'bridge' };
 
 export interface PreviewInfo {
   tool: Tool;

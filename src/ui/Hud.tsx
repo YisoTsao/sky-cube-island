@@ -2,9 +2,10 @@ import { useEffect, useState, type ReactElement } from 'react';
 import type { EnemyKind, TargetingMode, TowerKind } from '../domain/types';
 import { TARGETING_MODES, TOWER_KINDS } from '../domain/types';
 import {
-  ECONOMY, ENEMY_DEFS, HIGH_GROUND_PER_LEVEL, LEVEL_DAMAGE_MULT, LEVEL_RANGE_BONUS, TOWER_DEFS, sellRefund, upgradeCost,
+  ECONOMY, ENEMY_DEFS, TRAP_DEF, HIGH_GROUND_PER_LEVEL, LEVEL_DAMAGE_MULT, LEVEL_RANGE_BONUS, TOWER_DEFS, sellRefund, upgradeCost,
 } from '../domain/definitions';
 import { controller, level, runtime, syncStore } from '../app/runtime';
+import { executeCommand } from '../commands/execute';
 import { useUi } from '../state/store';
 import { saveSettings, type SettingsV1 } from '../settings/settings';
 import { audio } from '../audio/audio';
@@ -14,7 +15,7 @@ import { PhotoPanel, enterPhoto } from './PhotoMode';
 import { challengeMet, challengesFor } from '../domain/challenges';
 import { getLevel, nextLevelId } from '../levels/registry';
 import {
-  CameraIcon, CoinIcon, EnemyIcon, GearIcon, HeartIcon, LowerIcon, PauseIcon, PlayIcon, RaiseIcon, RotateIcon, StarIcon, TowerIcon, UndoIcon, WallIcon,
+  CameraIcon, CoinIcon, EnemyIcon, GearIcon, HeartIcon, LowerIcon, PauseIcon, PlayIcon, RaiseIcon, RotateIcon, StarIcon, TowerIcon, UndoIcon, WallIcon, TrapIcon, BridgeIcon,
 } from './icons';
 
 const TOWER_ORDER: readonly TowerKind[] = TOWER_KINDS;
@@ -59,6 +60,8 @@ const ENEMY_TRAIT: Partial<Record<EnemyKind, string>> = {
   frostGiant: '第三關頭目：完全無視緩速，物抗 30%',
   imp: '速度快的小惡魔，物抗 30%，用冰晶塔對付',
   phoenix: '第四關頭目：第一次倒下會浴火重生，恢復 60% 生命',
+  wyvern: '飛行：直線飛越地形、路障與水面，陷阱打不到，只能靠塔擊落',
+  ram: '撞上路障會停下來把它撞碎（約 3 秒），物抗 25%',
 };
 const ENEMY_NAMES = Object.fromEntries(Object.values(ENEMY_DEFS).map((d) => [d.kind, d.name])) as Record<EnemyKind, string>;
 
@@ -181,6 +184,18 @@ function ToolButton(props: {
   );
 }
 
+/** Whether this island has at least one bridge whose loss still leaves every portal a way to the core. */
+const breakableCache = new Map<string, boolean>();
+function bridgesBreakable(): boolean {
+  let v = breakableCache.get(level.id);
+  if (v === undefined) {
+    const s = { ...controller.state, gold: 1e6, traps: [], brokenConnectors: [] };
+    v = level.connectors.some((c) => executeCommand(level, s, { type: 'TOGGLE_BRIDGE', connectorId: c.id }).ok);
+    breakableCache.set(level.id, v);
+  }
+  return v;
+}
+
 function Toolbar() {
   const tool = useUi((s) => s.tool);
   const gold = useUi((s) => s.gold);
@@ -190,6 +205,7 @@ function Toolbar() {
   const towersOpen = prep || phase === 'COMBAT';
   const touch = useUi((s) => s.touchUi);
   const [hoverKind, setHoverKind] = useState<TowerKind | null>(null);
+  const canBreakBridges = bridgesBreakable();
   // Phones show one category at a time (towers / terrain) so every button keeps a readable size.
   const [cat, setCat] = useState<'towers' | 'terrain'>('towers');
   const shownCat = prep ? cat : 'towers'; // terrain tools only work while preparing
@@ -243,6 +259,8 @@ function Toolbar() {
         <ToolButton active={tool.type === 'raise'} disabled={!prep} affordable={gold >= ECONOMY.raiseCost} hotkey="R" cost={ECONOMY.raiseCost} label="抬升" icon={<RaiseIcon />} onClick={() => setTool({ type: 'raise' })} tip="抬升地形一格：高地塔射程更遠" />
         <ToolButton active={tool.type === 'lower'} disabled={!prep} affordable={gold >= ECONOMY.lowerCost} hotkey="F" cost={ECONOMY.lowerCost} label="降低" icon={<LowerIcon />} onClick={() => setTool({ type: 'lower' })} tip="降低地形一格" />
         <ToolButton active={tool.type === 'wall'} disabled={!prep} affordable={gold >= ECONOMY.wallCost} hotkey="B" cost={ECONOMY.wallCost} label="木牆" icon={<WallIcon />} onClick={() => setTool({ type: 'wall' })} tip="擋路改變敵人路線，不可完全封死" />
+        <ToolButton active={tool.type === 'trap'} disabled={!prep} affordable={gold >= TRAP_DEF.cost} hotkey="J" cost={TRAP_DEF.cost} label="陷阱" icon={<TrapIcon />} onClick={() => setTool({ type: 'trap' })} tip="鋪在路上的尖刺：不擋路，地面敵人踩到就受傷，飛行怪不受影響" />
+        {canBreakBridges && <ToolButton active={tool.type === 'bridge'} disabled={!prep} affordable={gold >= ECONOMY.bridgeCollapseCost} hotkey="G" cost={ECONOMY.bridgeCollapseCost} label="拆橋" icon={<BridgeIcon />} onClick={() => setTool({ type: 'bridge' })} tip={`拆掉一座橋逼敵人繞路（${ECONOMY.bridgeCollapseCost} 金），之後可花 ${ECONOMY.bridgeRepairCost} 金修回；不能切斷所有通路`} />}
       </div>
       <div className="panel toolbar-group small">{undo}</div>
     </div>
@@ -334,6 +352,8 @@ function SelectionPanel() {
   if (!c) return null;
   const conn = level.connectors.find((x) => x.chain.includes(c.id));
   const plat = level.platforms.find((p) => p.id === c.platformId);
+  const trap = (controller.state.traps ?? []).find((t) => t.cellId === c.id);
+  const broken = !!conn && (controller.state.brokenConnectors ?? []).includes(conn.id);
   return (
     <div className="panel selection-panel compact">
       <div className="sel-head">
@@ -343,7 +363,22 @@ function SelectionPanel() {
         </div>
         <button className="close-btn" onClick={clearSelection} aria-label="關閉">×</button>
       </div>
-      {conn && <div className="sel-note">此橋連接兩座浮島，是敵人跨島的唯一通道。橋與橋口不可改造。</div>}
+      {conn && <div className="sel-note">{broken ? '這座橋已被拆毀，敵人會改走其他橋。' : '此橋連接兩座浮島。橋與橋口不可改造；若還有別的通路，可用「拆橋」逼敵人繞路。'}</div>}
+      {trap && <div className="sel-note">尖刺陷阱：每 {TRAP_DEF.cooldownTicks / 20} 秒對踩上來的地面敵人造成 {TRAP_DEF.damage} 點物理傷害。</div>}
+      {prep && (trap || conn) && (
+        <div className="sel-actions">
+          {trap && (
+            <button className="btn danger" onClick={() => { issue({ type: 'REMOVE_TRAP', trapId: trap.id }); clearSelection(); }}>
+              拆除陷阱 <span className="btn-cost">+{TRAP_DEF.refund}</span>
+            </button>
+          )}
+          {conn && (
+            <button className="btn" onClick={() => { issue({ type: 'TOGGLE_BRIDGE', connectorId: conn.id }); clearSelection(); }}>
+              {broken ? '修復橋梁' : '拆毀橋梁'} <span className="btn-cost">-{broken ? ECONOMY.bridgeRepairCost : ECONOMY.bridgeCollapseCost}</span>
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -362,7 +397,7 @@ function ToolHint() {
       </div>
     );
   }
-  const label = tool.type === 'build' ? TOWER_DEFS[tool.kind].name : tool.type === 'raise' ? '抬升地形' : tool.type === 'lower' ? '降低地形' : '放置木牆';
+  const label = tool.type === 'build' ? TOWER_DEFS[tool.kind].name : tool.type === 'raise' ? '抬升地形' : tool.type === 'lower' ? '降低地形' : tool.type === 'trap' ? '放置陷阱' : tool.type === 'bridge' ? '拆橋 / 修橋' : '放置木牆';
   return (
     <div className={`hover-chip tool ${preview ? (preview.ok ? 'ok' : 'bad') : ''}`}>
       <b>{label}</b>
