@@ -2,7 +2,7 @@ import type {
   CellId, CommandResult, Elevation, GameCommand, GameEvent, GameState, LevelDef, RejectionCode, TowerInstance, TowerKind,
 } from '../domain/types';
 import { MAX_ELEVATION, MIN_ELEVATION } from '../domain/types';
-import { ECONOMY, TOWER_DEFS, TRAP_DEF, sellRefund, upgradeCost } from '../domain/definitions';
+import { ECONOMY, TOWER_DEFS, TRAP_DEF, nextTowerLevel, sellRefund, upgradeCost } from '../domain/definitions';
 import { deriveMap, type DerivedMap } from '../navigation/derived-map';
 import { computeRoutes } from '../navigation/connectivity';
 import { buildSpawnQueue } from '../simulation/waves';
@@ -178,8 +178,8 @@ function executeRaw(level: LevelDef, state: GameState, cmd: GameCommand): Comman
     case 'UPGRADE_TOWER': {
       const t = state.towers.find((x) => x.id === cmd.towerId);
       if (!t) return reject(state, 'NOT_FOUND');
-      if (t.level >= 3) return reject(state, 'MAX_LEVEL');
-      const to = (t.level + 1) as 2 | 3;
+      const to = nextTowerLevel(t.level);
+      if (!to) return reject(state, 'MAX_LEVEL');
       const cost = upgradeCost(t.kind, to);
       if (state.gold < cost) return reject(state, 'INSUFFICIENT_GOLD');
       const upgraded: TowerInstance = { ...t, level: to, investedGold: t.investedGold + cost };

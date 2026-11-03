@@ -148,6 +148,8 @@ export interface TowerDef {
   /** Wind: every enemy in range with line of sight (up to `maxTargets` + level − 1) is pushed back
    *  `cells` (+ `perLevel` per level above 1) along its route; then immune for `immuneTicks`. */
   knockback?: { cells: number; perLevel: number; immuneTicks: number; maxTargets: number };
+  /** Per-level overrides (index 0 = Lv1); resolved by `towerStats`. */
+  perLevel?: { slowRatio?: readonly number[]; blastRadiusWorld?: readonly number[] };
 }
 
 export interface EnemyDef {
@@ -221,6 +223,8 @@ export interface EnemyInstance {
   edgeIndex: number;
   segmentProgress: number;
   slowUntilTick: number;
+  /** Strength of the current slow (from the frost tower's level). Defaults to the Lv1 ratio. */
+  slowRatio?: number;
   spawnTick: number;
   /** Set once a rebirth enemy has used its revive. */
   reborn?: boolean;
@@ -298,7 +302,7 @@ export type CommandResult =
 /** Runtime-only flags; NOT part of GameState or saves. */
 export interface RuntimeFlags {
   paused: boolean;
-  speed: 1 | 2;
+  speed: 1 | 2 | 3;
 }
 
 export type Vec3 = { x: number; y: number; z: number };

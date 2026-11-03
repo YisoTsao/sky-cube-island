@@ -1,7 +1,7 @@
 import type { CellId, Elevation, TowerInstance, TowerLevel, Vec3 } from '../domain/types';
 import { HEIGHT_STEP_WORLD } from '../domain/types';
 import {
-  HIGH_GROUND_MAX_LEVELS, HIGH_GROUND_PER_LEVEL, LEVEL_RANGE_BONUS, PREVIEW_TARGET_OFFSET, TOWER_DEFS,
+  LEVEL_RANGE_BONUS, PREVIEW_TARGET_OFFSET, TOWER_DEFS, highGroundBonus,
 } from '../domain/definitions';
 import type { DerivedMap } from './derived-map';
 
@@ -65,8 +65,7 @@ export function towerGeometry(map: DerivedMap, tower: Pick<TowerInstance, 'kind'
 }
 
 export function effectiveRange(kind: TowerInstance['kind'], level: TowerLevel, towerElevation: number, enemyElevation: number): number {
-  const bonus = HIGH_GROUND_PER_LEVEL * Math.min(HIGH_GROUND_MAX_LEVELS, Math.max(0, towerElevation - enemyElevation));
-  return TOWER_DEFS[kind].baseRangeWorld + LEVEL_RANGE_BONUS[level] + bonus;
+  return TOWER_DEFS[kind].baseRangeWorld + LEVEL_RANGE_BONUS[level] + highGroundBonus(towerElevation - enemyElevation);
 }
 
 export const distance3D = (a: Vec3, b: Vec3): number => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);

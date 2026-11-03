@@ -6,8 +6,8 @@ import { advanceOneTick, flightLaneCells } from '../../src/simulation/engine';
 import { computeRoutes } from '../../src/navigation/connectivity';
 import { deriveMap } from '../../src/navigation/derived-map';
 import { sampleTowerRange } from '../../src/navigation/line-of-sight';
-import { ENEMY_DEFS, TOWER_DEFS, upgradeCost } from '../../src/domain/definitions';
-import type { GameState, LevelDef, TowerKind } from '../../src/domain/types';
+import { ENEMY_DEFS, MAX_TOWER_LEVEL, TOWER_DEFS, upgradeCost } from '../../src/domain/definitions';
+import type { GameState, LevelDef, TowerKind, TowerLevel } from '../../src/domain/types';
 
 /** Best anchor by visible route-cell coverage (both portals' routes). */
 export function bestAnchor(s: GameState, kind: TowerKind, level: LevelDef = L1, spread = false): { id: string; score: number } | null {
@@ -72,8 +72,8 @@ function spend(s: GameState, o: BotOptions, level: LevelDef): GameState {
     const kind = o.mix[s.towers.length % o.mix.length]!;
     const canBuild = s.towers.length < o.maxTowers && s.gold - TOWER_DEFS[kind].buildCost >= budgetFloor;
     const upgradable = s.towers
-      .filter((t) => t.level < 3)
-      .map((t) => ({ t, cost: upgradeCost(t.kind, (t.level + 1) as 2 | 3) }))
+      .filter((t) => t.level < MAX_TOWER_LEVEL)
+      .map((t) => ({ t, cost: upgradeCost(t.kind, (t.level + 1) as TowerLevel) }))
       .sort((a, b) => a.cost - b.cost || a.t.level - b.t.level);
     const up = upgradable[0];
     const preferUpgrade = s.towers.length >= o.upgradeAfter && up && s.gold - up.cost >= budgetFloor;

@@ -64,7 +64,7 @@ export const L1_01_WAVES: WaveDef[] = [
     g('knight', 8, AB, 60, 120),
     g('wisp', 6, AB, 70),
   ] },
-  { id: 'w5', hpScale: 2.0, clearGold: 0, entries: [
+  { id: 'w5', hpScale: 2.1, clearGold: 0, entries: [
     g('slime', 18, AB, 30),
     g('runner', 20, AB, 26, 80),
     g('knight', 10, AB, 60, 100),
