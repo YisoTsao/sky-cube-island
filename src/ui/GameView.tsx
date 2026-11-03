@@ -10,6 +10,7 @@ import { audio } from '../audio/audio';
 import type { Tool } from '../presentation/feed';
 import { TouchGestures, pinchToWheelDelta } from './touch-gestures';
 import { edgeScrollVector } from './edge-scroll';
+import { enterPhoto, exitPhoto, photoActive, photoDrag, photoKey } from './PhotoMode';
 
 const params = new URLSearchParams(location.search);
 /** A confirming touch tap within this distance of the previewed cell counts as the same cell. */
@@ -136,7 +137,7 @@ export function GameView() {
     const edgeMouse = { x: 0, y: 0, inside: false, overUi: false };
     const edgeScrollStep = (dt: number) => {
       const u = useUi.getState();
-      if (!edgeMouse.inside || edgeMouse.overUi || dragging || u.touchUi || !u.settings.edgeScroll) return;
+      if (!edgeMouse.inside || edgeMouse.overUi || dragging || u.photo || u.touchUi || !u.settings.edgeScroll) return;
       if (scene.introPlaying || u.pauseOpen || u.settingsOpen || u.helpOpen || !document.hasFocus()) return;
       const v = edgeScrollVector(edgeMouse.x, edgeMouse.y, canvas.getBoundingClientRect());
       scene.rig.edgeScroll(v.x, v.y, dt);
@@ -188,6 +189,7 @@ export function GameView() {
     // Touch: tap selects; with a tool held, the first tap previews a cell and a second tap on the
     // same cell confirms (no hover on phones). One-finger drag pans, pinch zooms, twist rotates.
     let dragging: { x: number; y: number; moved: boolean } | null = null;
+    let photoDragging: { x: number; y: number } | null = null;
     let lastHoverCell: CellId | null = null;
     let pendingTouchCell: CellId | null = null;
     const gestures = new TouchGestures();
@@ -215,6 +217,11 @@ export function GameView() {
         }
         return;
       }
+      if (photoDragging) {
+        photoDrag(ev.clientX - photoDragging.x, ev.clientY - photoDragging.y);
+        photoDragging.x = ev.clientX; photoDragging.y = ev.clientY;
+        return;
+      }
       if (dragging) {
         const dx = ev.clientX - dragging.x, dy = ev.clientY - dragging.y;
         if (Math.abs(dx) + Math.abs(dy) > 2) dragging.moved = true;
@@ -222,6 +229,7 @@ export function GameView() {
         dragging.x = ev.clientX; dragging.y = ev.clientY;
         return;
       }
+      if (photoActive()) return;
       const hit = scene.pick(ev.clientX, ev.clientY);
       if (hit.cellId === lastHoverCell) return;
       setHoverCell(hit.cellId);
@@ -300,6 +308,12 @@ export function GameView() {
         ev.preventDefault();
         return;
       }
+      if (photoActive() && ev.button === 0 && !ev.shiftKey) {
+        photoDragging = { x: ev.clientX, y: ev.clientY };
+        canvas.setPointerCapture(ev.pointerId);
+        ev.preventDefault();
+        return;
+      }
       if (ev.button === 1 || (ev.button === 0 && ev.shiftKey)) {
         dragging = { x: ev.clientX, y: ev.clientY, moved: false };
         canvas.setPointerCapture(ev.pointerId);
@@ -319,12 +333,13 @@ export function GameView() {
       if (isTouch(ev)) {
         const tap = gestures.up(ev.pointerId, ev.clientX, ev.clientY, ev.timeStamp);
         if (canvas.hasPointerCapture(ev.pointerId)) canvas.releasePointerCapture(ev.pointerId);
-        if (tap) primaryAt(tap.x, tap.y, true);
+        if (tap && !photoActive()) primaryAt(tap.x, tap.y, true);
         return;
       }
+      if (photoDragging) { photoDragging = null; canvas.releasePointerCapture(ev.pointerId); return; }
       if (dragging) { dragging = null; canvas.releasePointerCapture(ev.pointerId); }
     };
-    const onCancel = (ev: PointerEvent) => { if (isTouch(ev)) gestures.cancel(ev.pointerId); else dragging = null; };
+    const onCancel = (ev: PointerEvent) => { if (isTouch(ev)) gestures.cancel(ev.pointerId); else { dragging = null; photoDragging = null; } };
     // a new tool (or none) invalidates a half-confirmed touch placement
     const unsubTool = useUi.subscribe((s, prev) => {
       if (s.tool !== prev.tool) pendingTouchCell = null;
@@ -345,6 +360,13 @@ export function GameView() {
       audio.unlock();
       if (scene.introPlaying) { scene.skipIntro(); u.set({ introPlaying: false }); return; }
       const k = ev.key.toLowerCase();
+      if (photoActive()) {
+        if (k === 'tab' || k === ' ' || k === 'enter') ev.preventDefault();
+        if (keysDown.has(k)) return;
+        keysDown.add(k);
+        photoKey(k);
+        return;
+      }
       if ((ev.ctrlKey || ev.metaKey) && k === 'z') { ev.preventDefault(); issue({ type: 'UNDO_PREPARE' }); return; }
       if (k === 'tab') { ev.preventDefault(); if (!u.showAllRanges) { u.set({ showAllRanges: true }); scene.setShowAllRanges(true); } return; }
       if (keysDown.has(k)) return;
@@ -357,6 +379,7 @@ export function GameView() {
         const tw = sel?.type === 'tower' ? controller.state.towers.find((x) => x.id === sel.id) : undefined;
         if (tw) issue({ type: 'SET_TARGETING', towerId: tw.id, targeting: TARGETING_MODES[(TARGETING_MODES.indexOf(tw.targeting) + 1) % TARGETING_MODES.length]! });
       }
+      else if (k === 'p') enterPhoto();
       else if (k === 'r') setTool({ type: 'raise' });
       else if (k === 'f') setTool({ type: 'lower' });
       else if (k === 'b') setTool({ type: 'wall' });
@@ -423,6 +446,7 @@ export function GameView() {
     (window as unknown as { __sky: unknown }).__sky = { controller, scene, useUi, audio };
     return () => {
       cancelAnimationFrame(raf);
+      if (photoActive()) exitPhoto();
       clearInterval(panKeys);
       ro.disconnect();
       unsub();
@@ -448,10 +472,11 @@ export function GameView() {
 
   const preview = useUi((s) => s.wavePreview);
   const phase = useUi((s) => s.phase);
+  const photo = useUi((s) => !!s.photo);
   return (
     <div className="game-view">
       <canvas ref={canvasRef} className="game-canvas" />
-      <div ref={cardsRef} className="portal-cards" style={{ display: phase === 'PREPARE' ? undefined : 'none' }}>
+      <div ref={cardsRef} className="portal-cards" style={{ display: phase === 'PREPARE' && !photo ? undefined : 'none' }}>
         {level.portals.map((p) => (
           <PortalCard key={p.id} portalId={p.id} counts={preview[p.id]} />
         ))}

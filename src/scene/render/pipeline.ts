@@ -3,7 +3,7 @@ import {
   MeshBasicMaterial, type Camera, type Scene,
 } from 'three';
 import {
-  BloomEffect, Effect, EffectComposer, EffectPass, FXAAEffect, RenderPass, SMAAEffect, SMAAPreset,
+  BloomEffect, Effect, EffectAttribute, EffectComposer, EffectPass, FXAAEffect, RenderPass, SMAAEffect, SMAAPreset,
   ToneMappingEffect, ToneMappingMode, VignetteEffect,
 } from 'postprocessing';
 import { N8AOPostPass } from 'n8ao';
@@ -37,6 +37,7 @@ class GradeEffect extends Effect {
       uniform float uContrast;
       uniform vec3 uShadowTint;
       uniform vec3 uHighTint;
+      uniform int uFilter;
       void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
         vec3 c = inputColor.rgb;
         float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
@@ -44,6 +45,19 @@ class GradeEffect extends Effect {
         c = mix(c, c * uShadowTint, (1.0 - smoothstep(0.0, 0.45, l)) * 0.6);
         c = mix(c, c * uHighTint, smoothstep(0.5, 1.0, l) * 0.5);
         c = clamp((c - 0.5) * uContrast + 0.5 + 0.0, 0.0, 1.0) * 0.6 + c * 0.4;
+        // photo-mode filters (GDD §11.4 T1); 0 = none, gameplay always uses 0
+        if (uFilter > 0) {
+          float y = dot(c, vec3(0.2126, 0.7152, 0.0722));
+          if (uFilter == 1) c = c * vec3(1.08, 1.0, 0.86) + vec3(0.02, 0.01, 0.0);            // warm sun
+          else if (uFilter == 2) c = c * vec3(0.9, 0.99, 1.1) + vec3(0.0, 0.01, 0.03);        // cool morning
+          else if (uFilter == 3) {                                                             // vintage
+            vec3 sep = vec3(y) * vec3(1.07, 0.94, 0.76);
+            c = mix(c, sep, 0.55) * 0.92 + vec3(0.06, 0.05, 0.03);
+          }
+          else if (uFilter == 4) c = vec3(clamp((y - 0.5) * 1.15 + 0.5, 0.0, 1.0));           // mono
+          else if (uFilter == 5) c = mix(vec3(y), c, 1.35);                                   // vivid
+          c = clamp(c, 0.0, 1.0);
+        }
         outputColor = vec4(c, inputColor.a);
       }`, {
       uniforms: new Map<string, Uniform>([
@@ -51,10 +65,50 @@ class GradeEffect extends Effect {
         ['uContrast', new Uniform(1.08)],
         ['uShadowTint', new Uniform([0.94, 0.98, 1.08])],
         ['uHighTint', new Uniform([1.05, 1.02, 0.95])],
+        ['uFilter', new Uniform(0)],
       ]),
     });
   }
 }
+
+/**
+ * Miniature (tilt-shift) blur: sharp horizontal focus band, growing blur above and below it.
+ * GDD §11.3 only allows it in the intro / menu / photo mode, so gameplay keeps strength 0, which
+ * returns the input untouched. The pass stays in the chain at all times (see buildComposer).
+ */
+class TiltShiftEffect extends Effect {
+  constructor() {
+    super('TiltShiftEffect', /* glsl */`
+      uniform float uStrength;
+      uniform float uFocus;
+      uniform float uBand;
+      void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
+        float d = max(abs(uv.y - uFocus) - uBand, 0.0);
+        float r = clamp(d * 2.6, 0.0, 1.0) * uStrength * 9.0;
+        if (r < 0.35) { outputColor = inputColor; return; }
+        vec4 acc = inputColor; float w = 1.0;
+        for (int i = 0; i < 20; i++) {
+          float fi = float(i);
+          float a = fi * 2.39996;
+          float rr = sqrt((fi + 0.5) / 20.0) * r;
+          acc += texture2D(inputBuffer, uv + vec2(cos(a), sin(a)) * rr * texelSize);
+          w += 1.0;
+        }
+        outputColor = acc / w;
+      }`, {
+      attributes: EffectAttribute.CONVOLUTION,
+      uniforms: new Map<string, Uniform>([
+        ['uStrength', new Uniform(0)],
+        ['uFocus', new Uniform(0.5)],
+        ['uBand', new Uniform(0.12)],
+      ]),
+    });
+  }
+}
+
+/** Photo-mode look (filter id 0–5, tilt-shift strength 0–1). */
+export interface PhotoLook { filter: number; tiltShift: number; focus: number }
+export const PHOTO_FILTERS = ['原色', '暖陽', '晨霧', '復古', '黑白', '鮮豔'] as const;
 
 export class RenderPipeline {
   readonly renderer: WebGLRenderer;
@@ -67,6 +121,11 @@ export class RenderPipeline {
   private pixelRatio = 1;
   private frameTimes: number[] = [];
   private lastAdjust = 0;
+  private grade?: GradeEffect;
+  private tilt?: TiltShiftEffect;
+  private look: PhotoLook = { filter: 0, tiltShift: 0, focus: 0.5 };
+  /** Photo mode can hide the tactical overlay (routes, ranges, bars). */
+  overlayEnabled = true;
 
   constructor(canvas: HTMLCanvasElement, private scene: Scene, private camera: Camera, private overlayScene: Scene) {
     this.renderer = new WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false, depth: true, preserveDrawingBuffer: false });
@@ -118,10 +177,13 @@ export class RenderPipeline {
       this.composer.addPass(ao as unknown as RenderPass);
       this.ao = ao;
     }
+    this.tilt = new TiltShiftEffect();
+    this.composer.addPass(new EffectPass(this.camera, this.tilt));
     const effects: Effect[] = [];
     if (p.bloom > 0) effects.push(new BloomEffect({ luminanceThreshold: 1.0, luminanceSmoothing: 0.25, intensity: p.bloom, mipmapBlur: true, radius: 0.72 }));
     effects.push(new ToneMappingEffect({ mode: ToneMappingMode.NEUTRAL }));
-    effects.push(new GradeEffect());
+    this.grade = new GradeEffect();
+    effects.push(this.grade);
     effects.push(new VignetteEffect({ offset: 0.32, darkness: 0.38 }));
     this.composer.addPass(new EffectPass(this.camera, ...effects));
     // No toggleable pass may sit at the end of the chain: postprocessing only flags the *last added*
@@ -129,6 +191,16 @@ export class RenderPipeline {
     // shows black (this was the "map goes black after a click" bug with the old tilt-shift pass).
     if (p.aa === 'fxaa') this.composer.addPass(new EffectPass(this.camera, new FXAAEffect()));
     else if (p.aa === 'smaa' || p.aa === 'msaa+smaa') this.composer.addPass(new EffectPass(this.camera, new SMAAEffect({ preset: SMAAPreset.HIGH })));
+    this.setLook(this.look);
+  }
+
+  setLook(look: PhotoLook) {
+    this.look = { ...look };
+    if (this.grade) this.grade.uniforms.get('uFilter')!.value = look.filter;
+    if (this.tilt) {
+      this.tilt.uniforms.get('uStrength')!.value = look.tiltShift;
+      this.tilt.uniforms.get('uFocus')!.value = look.focus;
+    }
   }
 
   resize(w: number, h: number) {
@@ -182,7 +254,7 @@ export class RenderPipeline {
     this.camera.layers.mask = prevMask;
     this.scene.overrideMaterial = null;
     this.scene.background = prevBg;
-    this.renderer.render(this.overlayScene, this.camera);
+    if (this.overlayEnabled) this.renderer.render(this.overlayScene, this.camera);
   }
 
   dispose() {

@@ -6,7 +6,8 @@ import { GameView } from './GameView';
 import { HelpPanel, Hud, SettingsPanel } from './Hud';
 import { HeartIcon, StarIcon } from './icons';
 import { LEVEL_IDS, getLevel, isLevelId, type LevelId } from '../levels/registry';
-import { isUnlocked } from '../persistence/progress';
+import { isEndlessUnlocked, isUnlocked } from '../persistence/progress';
+import { endlessIdOf } from '../levels/endless';
 import { challengesFor } from '../domain/challenges';
 import { readSave } from '../persistence/save';
 import { launchLevel } from './launch';
@@ -36,6 +37,7 @@ function LevelCard({ id, selected, onPick }: { id: LevelId; selected: boolean; o
         {[1, 2, 3].map((i) => <StarIcon key={i} filled={best >= i} size={18} />)}
         {open && challenges.length > 0 && <span className="level-card-challenges" title={challenges.map((c) => `${rec?.challenges.includes(c.id) ? '✓' : '・'} ${c.label}`).join('\n')}>挑戰 {done}/{challenges.length}</span>}
         {rec && rec.bestHp > 0 && <span className="level-card-best">最佳 {rec.bestHp}♥</span>}
+        {(progress.endless?.[id] ?? 0) > 0 && <span className="level-card-best endless">無盡 {progress.endless![id]} 波</span>}
       </span>
       {!open && <span className="level-card-lock" aria-hidden>🔒</span>}
     </button>
@@ -54,14 +56,17 @@ function Title() {
     if (isLevelId(current) && open.includes(current) && !progress.best[current]) return current;
     return open[open.length - 1] ?? 'L1-01';
   });
+  const [endless, setEndless] = useState(false);
+  const endlessOpen = isEndlessUnlocked(picked, progress);
+  const playId = endless && endlessOpen ? endlessIdOf(picked) : picked;
   useEffect(() => {
     useUi.getState().set({ hasSave: false });
-    void readSave(picked).then((v) => useUi.getState().set({ hasSave: !!v }));
-  }, [picked]);
+    void readSave(playId).then((v) => useUi.getState().set({ hasSave: !!v }));
+  }, [playId]);
   const go = async (cont: boolean) => {
     if (busy) return;
     setBusy(true);
-    await launchLevel(picked, cont);
+    await launchLevel(playId, cont);
     setBusy(false);
   };
   return (
@@ -78,6 +83,21 @@ function Title() {
         <p className="title-tag">改造地形、架設高塔，守住漂浮島嶼的心臟。</p>
         <div className="level-select" role="group" aria-label="選擇關卡">
           {LEVEL_IDS.map((id) => <LevelCard key={id} id={id} selected={picked === id} onPick={() => { audio.play('click'); setPicked(id); }} />)}
+        </div>
+        <div className="mode-switch" role="group" aria-label="遊戲模式">
+          <button className={`mode-btn ${!endless || !endlessOpen ? 'on' : ''}`} aria-pressed={!endless || !endlessOpen} onClick={() => { audio.play('click'); setEndless(false); }}>戰役</button>
+          <button
+            className={`mode-btn ${endless && endlessOpen ? 'on' : ''}`} aria-pressed={endless && endlessOpen} disabled={!endlessOpen}
+            title={endlessOpen ? '波次永不停止，挑戰最高波數' : '通關這一關後解鎖'}
+            onClick={() => { audio.play('click'); setEndless(true); }}
+          >
+            無盡模式{endlessOpen ? '' : ' 🔒'}
+          </button>
+          <span className="mode-note">
+            {endlessOpen
+              ? endless ? `敵人一波比一波強，看你能撐幾波・最佳 ${progress.endless?.[picked] ?? 0} 波` : '五～七波的固定關卡，通關可得星等'
+              : '通關這一關後解鎖無盡模式'}
+          </span>
         </div>
         <div className="title-buttons">
           {hasSave && <button className="btn primary big" disabled={busy} onClick={() => void go(true)}>繼續遊戲</button>}

@@ -10,10 +10,11 @@ import { saveSettings, type SettingsV1 } from '../settings/settings';
 import { audio } from '../audio/audio';
 import { issue, setTool, startWave } from './GameView';
 import { launchLevel } from './launch';
+import { PhotoPanel, enterPhoto } from './PhotoMode';
 import { challengeMet, challengesFor } from '../domain/challenges';
 import { getLevel, nextLevelId } from '../levels/registry';
 import {
-  CoinIcon, EnemyIcon, GearIcon, HeartIcon, LowerIcon, PauseIcon, PlayIcon, RaiseIcon, RotateIcon, StarIcon, TowerIcon, UndoIcon, WallIcon,
+  CameraIcon, CoinIcon, EnemyIcon, GearIcon, HeartIcon, LowerIcon, PauseIcon, PlayIcon, RaiseIcon, RotateIcon, StarIcon, TowerIcon, UndoIcon, WallIcon,
 } from './icons';
 
 const TOWER_ORDER: readonly TowerKind[] = TOWER_KINDS;
@@ -88,6 +89,7 @@ function TopLeft() {
   const phase = useUi((s) => s.phase);
   const shownWave = Math.min(waveCount, waveIndex + 1);
   const pct = Math.max(0, hp / maxHp);
+  const endlessBest = useUi((s) => (level.endless ? s.progress.endless?.[level.endless.baseId] ?? 0 : 0));
   return (
     <div className="panel hud-topleft">
       <div className="hud-level">
@@ -97,12 +99,21 @@ function TopLeft() {
       <div className="hud-row">
         <div className="hud-wave">
           <span className="hud-label">波次</span>
-          <span className="hud-wave-num">{shownWave}<small>/{waveCount}</small></span>
-          <div className="wave-pips">
-            {Array.from({ length: waveCount }, (_, i) => (
-              <i key={i} className={i < waveIndex || (i === waveIndex && phase === 'WAVE_RESULT') ? 'done' : i === waveIndex ? 'cur' : ''} />
-            ))}
-          </div>
+          {level.endless ? (
+            <>
+              <span className="hud-wave-num">{shownWave}<small> 無盡</small></span>
+              <span className="hud-endless-best">最佳 {endlessBest} 波</span>
+            </>
+          ) : (
+            <>
+              <span className="hud-wave-num">{shownWave}<small>/{waveCount}</small></span>
+              <div className="wave-pips">
+                {Array.from({ length: waveCount }, (_, i) => (
+                  <i key={i} className={i < waveIndex || (i === waveIndex && phase === 'WAVE_RESULT') ? 'done' : i === waveIndex ? 'cur' : ''} />
+                ))}
+              </div>
+            </>
+          )}
         </div>
         <div key={pulse} className={`hud-heart ${pulse ? 'pulse' : ''} ${pct <= 0.25 ? 'danger' : ''}`}>
           <HeartIcon size={26} />
@@ -144,6 +155,7 @@ function TopRight() {
       <div className="panel hud-cam">
         <button className="icon-btn" title="向左旋轉 (Q)" aria-label="向左旋轉" onClick={() => runtime.scene?.rig.rotate(-1)}><RotateIcon dir={-1} /></button>
         <button className="icon-btn" title="向右旋轉 (E)" aria-label="向右旋轉" onClick={() => runtime.scene?.rig.rotate(1)}><RotateIcon dir={1} /></button>
+        <button className="icon-btn" title="拍照模式 (P)" aria-label="拍照模式" onClick={enterPhoto}><CameraIcon /></button>
         <button className="icon-btn" title="選單 (Esc)" aria-label="選單" onClick={openMenu}><GearIcon /></button>
       </div>
     </div>
@@ -485,11 +497,20 @@ function Defeat() {
   const phase = useUi((s) => s.phase);
   const text = useUi((s) => s.failureText);
   const hasCp = useUi((s) => s.hasCheckpoint);
+  const waveIndex = useUi((s) => s.waveIndex);
+  const newBest = useUi((s) => s.endlessNewBest);
+  const best = useUi((s) => (level.endless ? s.progress.endless?.[level.endless.baseId] ?? 0 : 0));
   if (phase !== 'DEFEAT') return null;
   return (
     <div className="modal-wrap dark">
       <div className="panel modal defeat">
         <div className="ribbon red">守護之心碎裂了</div>
+        {level.endless && (
+          <div className="endless-result">
+            <div className="endless-waves">撐過 <b>{waveIndex}</b> 波</div>
+            <div className="endless-best">{newBest && newBest === waveIndex ? '🏆 新紀錄！' : `最佳紀錄 ${best} 波`}</div>
+          </div>
+        )}
         <div className="failure-box">
           <div className="failure-label">失敗分析</div>
           <div className="failure-text">{text ?? '敵人突破了防線。'}</div>
@@ -499,7 +520,7 @@ function Defeat() {
           <button className="btn primary big" disabled={!hasCp} onClick={async () => { await controller.restartFromCheckpoint(); syncStore(); useUi.getState().set({ failureText: null }); }}>
             從本波準備期重來
           </button>
-          <button className="btn" onClick={() => { controller.newGame(); syncStore(); }}>重新開始關卡</button>
+          <button className="btn" onClick={() => { controller.newGame(); syncStore(); useUi.getState().set({ endlessNewBest: 0 }); }}>重新開始關卡</button>
           <button className="btn ghost" onClick={() => useUi.getState().set({ screen: 'title' })}>回到標題</button>
         </div>
       </div>
@@ -575,6 +596,7 @@ function PauseMenu() {
           <button className="btn primary big" onClick={close}>繼續遊戲</button>
           <button className="btn" onClick={() => useUi.getState().set({ settingsOpen: true })}>設定</button>
           <button className="btn" onClick={() => useUi.getState().set({ helpOpen: true })}>操作說明</button>
+          <button className="btn" onClick={() => { useUi.getState().set({ pauseOpen: false }); enterPhoto(); }}>拍照模式</button>
           <button className="btn ghost" onClick={() => { close(); useUi.getState().set({ screen: 'title' }); }}>回到標題（自動存檔）</button>
         </div>
         <ChallengeList />
@@ -666,7 +688,7 @@ export function HelpPanel() {
   const rows: [string, string][] = touch ? touchRows : [
     ['1 / 2 / 3', '選擇箭塔 / 冰晶塔 / 火砲塔'], ['R / F', '抬升 / 降低地形'], ['B', '放置木牆'], ['Ctrl+Z', '復原（準備期，最多 20 步）'],
     ['左鍵', '放置 / 選取'], ['右鍵 / Esc', '取消'], ['U / X', '升級 / 出售選取的塔'], ['Tab（按住）', '顯示所有塔射程'],
-    ['Q / E', '旋轉視角'], ['滾輪 / + -', '縮放'], ['WASD / 中鍵拖曳', '平移'], ['Enter', '開始波次 / 繼續'], ['Space', '暫停'],
+    ['Q / E', '旋轉視角'], ['P', '拍照模式（隱藏介面、自由視角、濾鏡、截圖）'], ['滾輪 / + -', '縮放'], ['WASD / 中鍵拖曳', '平移'], ['Enter', '開始波次 / 繼續'], ['Space', '暫停'],
     ['觸控', '單指拖曳平移、雙指縮放 / 旋轉、點兩下確認放置'],
   ];
   return (
@@ -704,6 +726,15 @@ export function Hud() {
   const intro = useUi((s) => s.introPlaying);
   const scale = useUi((s) => s.settings.uiScale);
   const touch = useUi((s) => s.touchUi);
+  const photo = useUi((s) => !!s.photo);
+  if (photo) {
+    return (
+      <div className={`hud photo ${touch ? 'touch' : ''}`} style={{ ['--ui-scale' as string]: scale }}>
+        <PhotoPanel />
+        <Toasts />
+      </div>
+    );
+  }
   return (
     <div className={`hud ${intro ? 'intro' : ''} ${touch ? 'touch' : ''}`} style={{ ['--ui-scale' as string]: scale }}>
       <TopLeft />

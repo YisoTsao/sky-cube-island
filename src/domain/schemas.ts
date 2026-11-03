@@ -30,7 +30,7 @@ export const WaveDefSchema = z.object({
   id: z.string(),
   entries: z.array(SpawnEntrySchema).min(1),
   clearGold: z.number().int().min(0),
-  hpScale: z.number().min(0.1).max(10).optional(),
+  hpScale: z.number().min(0.1).max(1000).optional(),
 });
 
 export const LevelDefSchema = z.object({
@@ -58,6 +58,7 @@ export const LevelDefSchema = z.object({
   maxShortestPathCost: z.number().int().min(1),
   waves: z.array(WaveDefSchema).min(1),
   decor: z.object({ trees: z.array(gridPos), rocks: z.array(gridPos), flowers: z.array(gridPos) }).optional(),
+  endless: z.object({ baseId: z.string() }).optional(),
 });
 
 export const GameStateSchema = z.object({

@@ -117,6 +117,8 @@ export interface LevelDef {
   maxShortestPathCost: number;
   waves: WaveDef[];
   decor?: LevelDecor;
+  /** Set on the generated endless variant of a campaign level (GDD §16 T3). */
+  endless?: { baseId: string };
 }
 
 export interface TowerDef {

@@ -646,3 +646,63 @@ b.bad { color: var(--bad); }
 .challenge-done { color: #c9932f; }
 .challenge-note { font: 700 11px/1.3 var(--font); color: var(--ink-soft); margin-top: 4px; }
 .level-card-challenges, .level-card-best { margin-left: 6px; font: 800 11px/1 var(--font); padding: 3px 6px; border-radius: 7px; background: rgba(0, 0, 0, .08); vertical-align: middle; }
+
+/* ------------------------------------------------------------------ photo mode (GDD §11.4 T1) */
+.hud.photo .photo-top {
+  position: absolute; top: calc(12px + var(--sat)); left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 12px; padding: 6px 8px 6px 16px; max-width: calc(100vw - 32px);
+  background: rgba(255, 247, 230, .88);
+}
+.photo-top b { white-space: nowrap; color: var(--wood-1); }
+.photo-hint { font-size: 12px; color: var(--ink-soft); }
+.photo-top .btn { padding: 6px 12px; font-size: 13px; white-space: nowrap; flex-shrink: 0; }
+.hud.photo .photo-dock {
+  position: absolute; bottom: calc(14px + var(--sab)); left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; width: min(720px, calc(100vw - 32px));
+  background: rgba(255, 247, 230, .9);
+}
+.photo-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.photo-dock .chip {
+  padding: 6px 10px; font: 700 13px/1 var(--font); border-radius: 9px; cursor: pointer; white-space: nowrap;
+  border: 2px solid rgba(138, 90, 53, .35); background: rgba(255, 255, 255, .7); color: var(--wood-1);
+}
+.photo-dock .chip.on { border-color: var(--crystal-deep); background: linear-gradient(180deg, #e6fbff, #bfeeff); color: #0d4a6e; }
+.photo-slider { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 150px; white-space: nowrap; font-weight: 700; font-size: 13px; color: var(--wood-1); }
+.photo-slider input { flex: 1; accent-color: var(--crystal-deep); }
+.photo-shoot { margin-left: auto; }
+.photo-flash { position: fixed; inset: 0; background: #fff; pointer-events: none; animation: photoFlash .45s ease-out forwards; }
+@keyframes photoFlash { from { opacity: .85; } to { opacity: 0; } }
+@media (max-width: 720px) {
+  .photo-hint { display: none; }
+  .hud.photo .photo-dock { padding: 8px; gap: 6px; }
+  .photo-dock .chip { padding: 6px 8px; font-size: 12px; }
+  .photo-shoot { flex-basis: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { .photo-flash { animation-duration: .2s; } }
+
+/* ------------------------------------------------------------------ endless mode (GDD §16 T3) */
+.mode-switch { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; margin: 0 auto 14px; max-width: 560px; }
+.mode-btn {
+  padding: 7px 16px; font: 800 14px/1 var(--font); border-radius: 999px; cursor: pointer;
+  border: 2px solid rgba(62, 38, 21, .5); background: rgba(255, 249, 236, .75); color: var(--ink);
+}
+.mode-btn.on { background: linear-gradient(180deg, #ffe17a, #f2a93c); border-color: #7a4a0e; color: #4a2a00; box-shadow: 0 3px 0 #7a4a0e; }
+.mode-btn:disabled { opacity: .55; cursor: not-allowed; }
+.mode-note { flex-basis: 100%; font-size: 12px; font-weight: 700; color: #12385e; text-shadow: 0 1px 0 rgba(255, 255, 255, .6); }
+.level-card-best.endless { background: rgba(160, 107, 255, .18); color: #4b2a8f; }
+.hud-endless-best { display: block; margin-top: 4px; font: 800 11px/1 var(--font); color: #5b2fbf; }
+.endless-result { display: flex; align-items: baseline; justify-content: center; gap: 14px; margin: 4px 0 10px; }
+.endless-waves { font: 800 18px/1 var(--font); color: var(--ink); }
+.endless-waves b { font-size: 34px; color: #5b2fbf; }
+.endless-best { font: 800 14px/1 var(--font); color: var(--gold-deep); }
+@media (max-height: 520px), (max-width: 720px) { .mode-switch { margin-bottom: 8px; } .mode-btn { padding: 6px 12px; font-size: 13px; } }
+/* short landscape phones: the mode switch must not push the start button off-screen */
+@media (orientation: landscape) and (max-height: 520px) {
+  .mode-switch { margin: 0 auto 6px; }
+  .mode-note { display: none; }
+  .mode-btn { padding: 4px 12px; font-size: 12px; }
+}
+@media (orientation: landscape) and (max-height: 400px) {
+  .title-tag { display: none; }
+  .logo-sub { margin-top: 6px; }
+}

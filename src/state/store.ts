@@ -11,6 +11,8 @@ export type Selection =
   | { type: 'cell'; cellId: CellId }
   | null;
 
+export interface PhotoState { filter: number; tiltShift: number; focus: number; hideTactical: boolean; orbit: boolean }
+
 export interface Toast { id: number; text: string; kind: 'error' | 'info' | 'success' }
 
 export interface HoverInfo { cellId: CellId; platform: string; elevation: number; kind: string; editable: boolean; buildable: boolean }
@@ -55,6 +57,12 @@ export interface UiState {
   heartPulse: number;
   /** True while the player is using touch (last pointer was a finger/pen, or a coarse-pointer device). */
   touchUi: boolean;
+  /** Photo mode (GDD §11.4 T1): HUD hidden, free camera, filters. null when off. */
+  photo: PhotoState | null;
+  /** Bumped on each photo capture (shutter flash). */
+  photoFlash: number;
+  /** Endless mode: waves cleared when this run set a new best (0 = no new best yet). */
+  endlessNewBest: number;
   set(p: Partial<UiState>): void;
   toast(text: string, kind?: Toast['kind']): void;
 }
@@ -89,6 +97,9 @@ export const useUi = create<UiState>((set, get) => ({
   stars: 0,
   hasSave: false,
   touchUi: typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches,
+  photo: null,
+  photoFlash: 0,
+  endlessNewBest: 0,
   hasCheckpoint: false,
   introPlaying: false,
   qualityLabel: 'high',

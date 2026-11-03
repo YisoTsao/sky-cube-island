@@ -11,10 +11,16 @@ export interface LevelRecord {
 }
 
 /** Campaign progress: best stars per cleared level (localStorage, apart from game saves). */
-export interface ProgressV1 { schemaVersion: 1; best: Record<string, 1 | 2 | 3>; records?: Record<string, LevelRecord> }
+export interface ProgressV1 {
+  schemaVersion: 1;
+  best: Record<string, 1 | 2 | 3>;
+  records?: Record<string, LevelRecord>;
+  /** Endless mode (GDD §16 T3): most waves cleared per base level. */
+  endless?: Record<string, number>;
+}
 
 const KEY = 'skybound.progress.v1';
-const empty = (): ProgressV1 => ({ schemaVersion: 1, best: {}, records: {} });
+const empty = (): ProgressV1 => ({ schemaVersion: 1, best: {}, records: {}, endless: {} });
 
 function cleanRecord(v: unknown): LevelRecord | null {
   if (!v || typeof v !== 'object') return null;
@@ -37,7 +43,11 @@ export function loadProgress(): ProgressV1 {
     if (p.records && typeof p.records === 'object') {
       for (const [k, v] of Object.entries(p.records)) { const r = cleanRecord(v); if (r) records[k] = r; }
     }
-    return { schemaVersion: 1, best, records };
+    const endless: Record<string, number> = {};
+    if (p.endless && typeof p.endless === 'object') {
+      for (const [k, v] of Object.entries(p.endless)) if (Number.isFinite(v) && v > 0) endless[k] = Math.floor(v);
+    }
+    return { schemaVersion: 1, best, records, endless };
   } catch {
     return empty();
   }
@@ -59,6 +69,7 @@ export function recordVictory(levelId: string, stars: 1 | 2 | 3, p: ProgressV1 =
     schemaVersion: 1,
     best: { ...p.best, [levelId]: Math.max(stars, p.best[levelId] ?? 0) as 1 | 2 | 3 },
     records: { ...(p.records ?? {}), [levelId]: rec },
+    endless: { ...(p.endless ?? {}) },
   };
   saveProgress(next);
   return next;
@@ -69,4 +80,17 @@ export function isUnlocked(levelId: string, p: ProgressV1): boolean {
   const i = (LEVEL_IDS as readonly string[]).indexOf(levelId);
   if (i <= 0) return i === 0;
   return !!p.best[LEVEL_IDS[i - 1]!];
+}
+
+/** Store an endless-mode result (waves cleared) when it beats the best for that island. */
+export function recordEndless(baseId: string, wavesCleared: number, p: ProgressV1 = loadProgress()): ProgressV1 {
+  if (wavesCleared <= (p.endless?.[baseId] ?? 0)) return p;
+  const next: ProgressV1 = { ...p, records: { ...(p.records ?? {}) }, endless: { ...(p.endless ?? {}), [baseId]: wavesCleared } };
+  saveProgress(next);
+  return next;
+}
+
+/** Endless mode opens once the campaign level itself has been cleared. */
+export function isEndlessUnlocked(baseId: string, p: ProgressV1): boolean {
+  return !!p.best[baseId];
 }
