@@ -16,7 +16,8 @@ import { TacticalOverlay } from './overlay/overlay';
 import { Vfx } from './vfx/vfx';
 import { TowerView, EnemyView, WallView, TrapView } from './entities';
 import { CoreModel, PortalModel, bridgeGeometry } from './models/landmarks';
-import { treeGeometry, rockGeometry, flowerGeometry, grassTuftGeometry, lanternGeometry, enemyGeometry } from './models/props';
+import { treeGeometry, rockGeometry, flowerGeometry, grassTuftGeometry, lanternGeometry } from './models/props';
+import { enemyGeometry, type EnemyDetail } from './models/enemies';
 import { createVoxelMaterial, sharedUniforms } from './materials/voxel-material';
 import { TACTICAL, type PaletteKey } from './palette';
 
@@ -171,7 +172,8 @@ export class SceneApp {
     this.updatePickMesh();
     this.scene.add(this.pickMesh);
 
-    this.overlay.setGhostGeometry(enemyGeometry('slime').body);
+    this.overlay.setGhostGeometry(enemyGeometry('slime', this.enemyDetail(opts.quality)).body);
+    this.prewarmEnemies(this.enemyDetail(opts.quality));
     this.overlay.colorblind = opts.colorblind;
     this.blockedTex = this.makeBlockedIcon();
 
@@ -843,7 +845,7 @@ export class SceneApp {
       let v = this.enemies.get(e.id);
       if (!v) {
         const h = parseInt(e.id.slice(1), 10) || 0;
-        v = new EnemyView(e.id, e.kind, ((h * 0.618) % 1 - 0.5) * 0.24);
+        v = new EnemyView(e.id, e.kind, ((h * 0.618) % 1 - 0.5) * 0.24, this.enemyDetail(this.opts.quality));
         this.scene.add(v.group);
         this.enemies.set(e.id, v);
         this.enemyWorld(e, v.group.position);
@@ -978,5 +980,30 @@ export class SceneApp {
     return { fps: Math.round(this.stats.fps), ms: Math.round(this.stats.ms * 10) / 10, calls: info.render.calls, tris: info.render.triangles, dpr: Math.round(this.pipeline.currentPixelRatio * 100) / 100 };
   }
 
-  dispose() { this.pipeline.dispose(); }
+  /** Enemy model resolution: fine 1/32-cell voxels except on the low tier (weak phones). */
+  private enemyDetail(q: QualityLevel): EnemyDetail { return q === 'low' ? 'low' : 'high'; }
+
+  private prewarmTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * Build (and cache) the models of every enemy this level spawns, one kind per tick while
+   * the player is still preparing, so the first spawn of a kind mid-wave never hitches.
+   */
+  private prewarmEnemies(detail: EnemyDetail) {
+    const kinds = new Set<EnemyKind>();
+    const add = (k: EnemyKind) => { if (kinds.has(k)) return; kinds.add(k); const sp = ENEMY_DEFS[k].splitInto; if (sp) add(sp.kind); };
+    for (const w of this.level.waves) for (const e of w.entries) add(e.enemyKind);
+    const queue = [...kinds];
+    const step = () => {
+      const k = queue.shift();
+      if (!k) { this.prewarmTimer = null; return; }
+      enemyGeometry(k, detail);
+      this.prewarmTimer = setTimeout(step, 40);
+    };
+    this.prewarmTimer = setTimeout(step, 300);
+  }
+
+  dispose() {
+    if (this.prewarmTimer) clearTimeout(this.prewarmTimer);
+    this.pipeline.dispose();
+  }
 }

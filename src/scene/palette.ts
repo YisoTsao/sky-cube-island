@@ -49,6 +49,13 @@ export const PALETTE = {
   phoenix: 0xff6a2a, phoenixGold: 0xffc23a, phoenixDeep: 0xc8301e,
   wyvern: 0x3fa89a, wyvernDark: 0x24706a, wyvernWing: 0x8fe0c8, wyvernBelly: 0xe8d8a0,
   ram: 0x8a7a6a, ramDark: 0x5a4c40, ramWool: 0xe9e2d2, ramHorn: 0xc9a46a,
+  // enemy detail accents
+  blush: 0xff9db5, mouth: 0x5a2436, tongue: 0xff6f8a, fang: 0xfffaf0, moss: 0x7cbf4a, mossDark: 0x4f8a37,
+  golemCrack: 0x56525c, golemRune: 0x7ff0ff, ruby: 0xff4f6a, helmet: 0xf2b53a, helmetDark: 0xb98322,
+  ghostVoid: 0x2a2f55, crabSpot: 0x8ff0e0, crystalTip: 0xeadcff, salamanderSpot: 0x8f2a18,
+  batInner: 0xd98fb0, yetiDeep: 0x9fb2cc, impBelly: 0xffd36a, phoenixTip: 0xfff1a8,
+  wyvernSpine: 0xffd27a, ramPlate: 0x7d8796, ramPlateLight: 0xb4bcc8, ramFace: 0x4a3c32, ramMuzzle: 0x8a7462,
+  bossCrack: 0xffc23a, frostBeard: 0xf4fbff, shamanTrim: 0xffd76a, feather: 0xff7a5a, featherB: 0x5ad1ff,
   trap: 0x7c8590, trapDark: 0x4d545e, trapSpike: 0xdfe6ee,
   // terrain themes
   snow: 0xeef4fb, snowLight: 0xffffff, snowShade: 0xd2e0ef, snowSide: 0xdfe9f4,
