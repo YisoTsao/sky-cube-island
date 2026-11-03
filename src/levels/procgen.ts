@@ -61,7 +61,12 @@ export interface GeneratedLevelSpec {
   plan: WavePlan;
   initialGold: number;
   coreHp?: number;
+  /** Hand edits from the level editor, keyed "x,z": raise a cell one step, make it a cliff pillar,
+   *  cut it out (void) or add a ground cell over the void (joined to the nearest island). */
+  overrides?: Record<string, CellOverride>;
 }
+
+export type CellOverride = 'raise' | 'pillar' | 'void' | 'ground';
 
 const SIZE = 32;
 const CORE_RECT: Rect = { x0: 11, x1: 20, z0: 11, z1: 20 };
@@ -239,6 +244,27 @@ function layoutOnce(spec: GeneratedLevelSpec, seed: number) {
       break;
     }
   }
+  // editor overrides (applied before decor so trees never sit on an edited cell)
+  for (const [k, o] of Object.entries(spec.overrides ?? {})) {
+    const [x, z] = k.split(',').map(Number) as [number, number];
+    if (!(x >= 0 && x < SIZE && z >= 0 && z < SIZE)) continue;
+    const g = ground.get(k);
+    if (o === 'void') { if (g) ground.delete(k); continue; }
+    if (o === 'ground') {
+      if (g) continue;
+      // join the closest island at its base height
+      let best: Island | null = null, bd = Infinity;
+      for (const isl of islands) {
+        const dx = Math.max(isl.rect.x0 - x, 0, x - isl.rect.x1), dz = Math.max(isl.rect.z0 - z, 0, z - isl.rect.z1);
+        if (dx + dz < bd) { bd = dx + dz; best = isl; }
+      }
+      if (best) ground.set(k, { island: best, elevation: best.elevation, kind: 'flat' });
+      continue;
+    }
+    if (!g) continue;
+    if (o === 'raise') { g.kind = 'plateau'; g.elevation = Math.min(6, g.island.elevation + 1); }
+    if (o === 'pillar') { g.kind = 'pillar'; g.elevation = Math.min(6, g.island.elevation + 4); }
+  }
   // decor
   const trees: GridPos[] = [], rocks: GridPos[] = [];
   const decor = new Set<string>();
@@ -328,6 +354,19 @@ export function planWaves(plan: WavePlan, portalCount: number): WaveDef[] {
     out.push(paced({ id: `w${n + 1}`, hpScale, clearGold: n === N - 1 ? 0 : 100 + 15 * n, entries }, portals, plan.minSeconds ?? 125));
   }
   return out;
+}
+
+/** One attempt at exactly this seed (the level editor: overrides only make sense for one layout). */
+export function tryGenerateLevel(spec: GeneratedLevelSpec): { ok: true; level: LevelDef } | { ok: false; errors: string[]; level: LevelDef | null } {
+  const portalCount = spec.layout.sides.reduce((n, s) => n + (spec.layout.portals?.[s] ?? 1), 0);
+  let level: LevelDef;
+  try {
+    level = toLevel(spec, planWaves(spec.plan, portalCount), spec.seed);
+  } catch (e) {
+    return { ok: false, errors: [String((e as Error).message ?? e)], level: null };
+  }
+  const v = validateLevel(level);
+  return v.ok ? { ok: true, level } : { ok: false, errors: v.errors, level };
 }
 
 const generated = new Map<string, LevelDef>();

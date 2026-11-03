@@ -19,7 +19,9 @@ export interface HoverInfo { cellId: CellId; platform: string; elevation: number
 
 /** Low-frequency HUD state (Tech §8.2: never per-enemy per-tick React renders). */
 export interface UiState {
-  screen: 'title' | 'game';
+  screen: 'title' | 'game' | 'editor';
+  /** Spec the level editor opens with (a shared link or a saved level); null = default island. */
+  editorSpec: import('../levels/custom').CustomSpec | null;
   /** Active level (the game view remounts when it changes). */
   levelId: string;
   levelName: string;
@@ -70,6 +72,7 @@ export interface UiState {
 let toastId = 1;
 export const useUi = create<UiState>((set, get) => ({
   screen: 'title',
+  editorSpec: null,
   levelId: 'L1-01',
   levelName: '',
   progress: loadProgress(),
