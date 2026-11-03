@@ -358,6 +358,9 @@ b.bad { color: var(--bad); }
 }
 .chapter-tab.on { background: #8ff07f; border-color: #1f5a22; box-shadow: 0 2px 0 #1f5a22; }
 .chapter-tab:disabled { cursor: not-allowed; opacity: .6; filter: grayscale(.6); }
+.chapter-tab.daily.on { background: #ffd36a; border-color: #a86a12; box-shadow: 0 2px 0 #a86a12; }
+.level-select .level-card.daily { width: min(520px, 92vw); cursor: default; grid-column: 1 / -1; justify-self: center; }
+.mode-switch[hidden] { display: none; }
 .chapter-count { margin-left: 6px; font-size: 11px; color: var(--ink-soft); }
 .level-select { display: flex; gap: 12px; justify-content: center; margin: 0 auto 20px; max-width: 100%; }
 .level-select .level-card { width: 196px; }

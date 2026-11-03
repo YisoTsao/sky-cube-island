@@ -63,6 +63,7 @@ const ENEMY_TRAIT: Partial<Record<EnemyKind, string>> = {
   wyvern: '飛行：直線飛越地形、路障與水面，陷阱打不到，只能靠塔擊落',
   ram: '撞上路障會停下來把它撞碎（約 3 秒），物抗 25%',
 };
+export const WEATHER_NAME: Record<string, string> = { clear: '晴天', rain: '微雨', snow: '飄雪', fog: '霧天' };
 const ENEMY_NAMES = Object.fromEntries(Object.values(ENEMY_DEFS).map((d) => [d.kind, d.name])) as Record<EnemyKind, string>;
 
 function openMenu() {
@@ -688,6 +689,7 @@ export function SettingsPanel() {
             <div className="set-hint">目前：{qName[qualityLabel] ?? qualityLabel}</div>
             <Toggle label="動態解析度" value={s.dynamicResolution} onChange={(v) => update({ dynamicResolution: v })} />
             <Toggle label="傷害數字" value={s.damageNumbers} onChange={(v) => update({ damageNumbers: v })} />
+            <Toggle label={`天氣效果${level.weather && level.weather !== 'clear' ? `（本關：${WEATHER_NAME[level.weather]}）` : ''}`} value={s.weather !== false} onChange={(v) => update({ weather: v })} />
             <Toggle label="滑鼠移到邊緣捲動地圖" value={s.edgeScroll} onChange={(v) => update({ edgeScroll: v })} />
             <Slider label="UI 大小" value={s.uiScale} min={0.8} max={1.3} onChange={(v) => update({ uiScale: v })} />
           </section>

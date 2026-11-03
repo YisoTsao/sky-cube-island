@@ -6,6 +6,7 @@ import { generateL1_04 } from './l1-04.generator';
 import { baseIdOf, isEndlessId, makeEndlessLevel } from './endless';
 import { GENERATED_SPECS } from './campaign';
 import { generateLevel } from './procgen';
+import { dateOfDaily, isDailyId, makeDailyLevel } from './daily';
 
 /** Campaign order (3 chapters × 5 islands). A level unlocks once the previous one has been cleared. */
 export const LEVEL_IDS = [
@@ -30,19 +31,28 @@ export function isLevelId(id: string): id is LevelId {
   return (LEVEL_IDS as readonly string[]).includes(id);
 }
 
+/** Weather of the hand-authored islands (the generated ones carry it in their descriptor). */
+const AUTHORED_WEATHER: Partial<Record<LevelId, LevelDef['weather']>> = { 'L1-02': 'fog', 'L1-03': 'snow' };
+
 export function getLevel(id: LevelId): LevelDef {
   let l = cache.get(id);
-  if (!l) { l = GENERATORS[id](); cache.set(id, l); }
+  if (!l) {
+    l = GENERATORS[id]();
+    const w = AUTHORED_WEATHER[id];
+    if (w) l = { ...l, weather: w };
+    cache.set(id, l);
+  }
   return l;
 }
 
 /** A campaign level or its endless variant (`L1-02-E`). */
 export function isPlayableId(id: string): boolean {
-  return isLevelId(id) || (isEndlessId(id) && isLevelId(baseIdOf(id)));
+  return isLevelId(id) || (isEndlessId(id) && isLevelId(baseIdOf(id))) || isDailyId(id);
 }
 
 export function getPlayableLevel(id: string): LevelDef {
   if (isLevelId(id)) return getLevel(id);
+  if (isDailyId(id)) return makeDailyLevel(dateOfDaily(id));
   const base = baseIdOf(id);
   if (isEndlessId(id) && isLevelId(base)) return makeEndlessLevel(getLevel(base));
   throw new Error(`unknown level ${id}`);

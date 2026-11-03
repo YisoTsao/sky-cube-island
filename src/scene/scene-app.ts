@@ -10,6 +10,7 @@ import { RenderPipeline, QUALITY, type QualityLevel } from './render/pipeline';
 import { CameraRig } from './camera/camera-rig';
 import { Environment } from './environment/environment';
 import { AmbientLife } from './environment/ambient-life';
+import { Weather } from './environment/weather';
 import { Terrain } from './terrain/terrain';
 import { TacticalOverlay } from './overlay/overlay';
 import { Vfx } from './vfx/vfx';
@@ -31,6 +32,8 @@ export interface SceneOptions {
   damageNumbers: boolean;
   colorblind: boolean;
   dynamicResolution: boolean;
+  /** Show the island's weather (presentation only). */
+  weather?: boolean;
   visualTest?: boolean;
 }
 
@@ -77,6 +80,7 @@ export class SceneApp {
   readonly rig: CameraRig;
   readonly env: Environment;
   readonly ambient: AmbientLife;
+  readonly weather: Weather;
   readonly terrain: Terrain;
   readonly overlay: TacticalOverlay;
   readonly vfx: Vfx;
@@ -126,6 +130,8 @@ export class SceneApp {
     this.scene.environmentIntensity = 0.55;
     this.ambient = new AmbientLife({ level: feed.level, center, groundAt: (x, z) => this.groundAt(x, z) });
     this.scene.add(this.ambient.group);
+    this.weather = new Weather(center);
+    this.scene.add(this.weather.group);
 
     this.terrain = new Terrain({ level: feed.level, elevationOf: (id) => feed.elevationOf(id) });
     for (const m of this.terrain.group.children) m.layers.enable(RenderPipeline.DEPTH_LAYER);
@@ -322,6 +328,21 @@ export class SceneApp {
 
   // ---------------------------------------------------------------- options
   private ambientConfigured = false;
+  private weatherKey: string | null = null;
+  private baseLight: { sun: number; hemi: number } | null = null;
+  private configureWeather() {
+    const kind = this.opts.weather === false ? 'clear' : this.level.weather ?? 'clear';
+    const q = this.opts.quality;
+    const key = `${kind}:${q}:${this.opts.reducedMotion}`;
+    if (key === this.weatherKey) return;
+    this.weatherKey = key;
+    this.weather.configure({ kind, density: q === 'low' ? 60 : q === 'medium' ? 110 : q === 'high' ? 170 : 220, reducedMotion: this.opts.reducedMotion });
+    // overcast: soften the sun and lift the sky fill a little
+    this.baseLight ??= { sun: this.env.sun.intensity, hemi: this.env.hemi.intensity };
+    const k = this.weather.dim;
+    this.env.sun.intensity = this.baseLight.sun * (1 - k);
+    this.env.hemi.intensity = this.baseLight.hemi * (1 + k * 0.35);
+  }
   applyOptions(o: Partial<SceneOptions>) {
     this.opts = { ...this.opts, ...o };
     const p = QUALITY[this.opts.quality];
@@ -336,6 +357,7 @@ export class SceneApp {
       const q = this.opts.quality;
       this.ambient.configure({ birds: q === 'low' ? 1 : 2, particles: q === 'low' ? 0 : q === 'medium' ? 50 : q === 'high' ? 90 : 130, reducedMotion: this.opts.reducedMotion });
     }
+    if (o.quality !== undefined || o.reducedMotion !== undefined || o.weather !== undefined || this.weatherKey === null) this.configureWeather();
     sharedUniforms.uWind.value = p.wind && !this.opts.reducedMotion ? 1 : 0;
     sharedUniforms.uRuneAnimate.value = p.runeAnimate && !this.opts.reducedMotion ? 1 : 0;
     this.rig.shakeScale = this.opts.reducedMotion ? 0 : this.opts.screenShake;
@@ -791,6 +813,7 @@ export class SceneApp {
     this.env.update(dtEnv, this.rig.yaw, this.width / Math.max(1, this.height));
     this.terrain.update(dtEnv);
     this.ambient.update(dtEnv);
+    this.weather.update(dtEnv, sharedUniforms.uTime.value);
     this.core.update(dtEnv, sharedUniforms.uTime.value);
     this.core.setHp(this.feed.state.coreHp);
     for (const p of this.portals.values()) p.update(dtEnv);

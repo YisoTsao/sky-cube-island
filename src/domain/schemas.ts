@@ -59,6 +59,8 @@ export const LevelDefSchema = z.object({
   waves: z.array(WaveDefSchema).min(1),
   decor: z.object({ trees: z.array(gridPos), rocks: z.array(gridPos), flowers: z.array(gridPos) }).optional(),
   endless: z.object({ baseId: z.string() }).optional(),
+  weather: z.enum(['clear', 'rain', 'snow', 'fog']).optional(),
+  daily: z.object({ date: z.string(), modifiers: z.array(z.string()) }).optional(),
 });
 
 export const GameStateSchema = z.object({
@@ -117,6 +119,8 @@ export const SettingsSchema = z.object({
     ui: z.number().min(0).max(1), ambience: z.number().min(0).max(1),
   }),
   language: z.enum(['zh-TW', 'en']),
+  /** Weather effects (presentation only). Optional so older saved settings still load. */
+  weather: z.boolean().default(true),
 });
 
 export type SettingsV1 = z.infer<typeof SettingsSchema>;

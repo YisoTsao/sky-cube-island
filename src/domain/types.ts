@@ -99,6 +99,8 @@ export interface LevelDecor {
 
 /** Lighting / sky mood used by the renderer (presentation only). */
 export type LevelTheme = 'day' | 'dusk' | 'snow' | 'ember';
+/** Presentation-only weather (GDD §16 T3「微雨、飄雪、霧天，純表現不影響規則」). */
+export type WeatherKind = 'clear' | 'rain' | 'snow' | 'fog';
 
 export interface LevelDef {
   schemaVersion: 2;
@@ -121,6 +123,10 @@ export interface LevelDef {
   decor?: LevelDecor;
   /** Set on the generated endless variant of a campaign level (GDD §16 T3). */
   endless?: { baseId: string };
+  /** Default weather of the island (presentation only). */
+  weather?: WeatherKind;
+  /** Set on a daily seeded challenge: its date (YYYY-MM-DD) and the modifier labels shown to the player. */
+  daily?: { date: string; modifiers: string[] };
 }
 
 export interface TowerDef {
