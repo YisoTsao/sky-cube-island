@@ -12,11 +12,12 @@ describe('campaign levels', () => {
   it.each(LEVEL_IDS)('%s is valid', (id) => {
     expect(validateLevel(getLevel(id)).errors).toEqual([]);
   });
-  it.each(LEVEL_IDS)('%s fields at least ten enemy kinds', (id) => {
+  // hand-authored islands (the generated ones are covered by campaign.test.ts)
+  it.each(LEVEL_IDS.slice(0, 4))('%s fields at least ten enemy kinds', (id) => {
     const kinds = new Set(getLevel(id).waves.flatMap((w) => w.entries.map((e) => e.enemyKind)));
     expect(kinds.size).toBeGreaterThanOrEqual(10);
   });
-  it.each(LEVEL_IDS)('%s: every wave spawns for 2+ minutes and sends 90–200 enemies', (id) => {
+  it.each(LEVEL_IDS.slice(0, 4))('%s: every wave spawns for 2+ minutes and sends 90–200 enemies', (id) => {
     const l = getLevel(id);
     const ids = l.portals.map((p) => p.id);
     for (const w of l.waves) {
@@ -31,7 +32,7 @@ describe('campaign levels', () => {
     expect(nextLevelId('L1-01')).toBe('L1-02');
     expect(nextLevelId('L1-02')).toBe('L1-03');
     expect(nextLevelId('L1-03')).toBe('L1-04');
-    expect(nextLevelId('L1-04')).toBeNull();
+    expect(nextLevelId('L1-04')).toBe('L1-05');
   });
 });
 

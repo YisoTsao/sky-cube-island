@@ -351,7 +351,16 @@ b.bad { color: var(--bad); }
 .title-foot { margin-top: 26px; color: rgba(18, 56, 94, .7); font-size: 12px; font-weight: 700; letter-spacing: .1em; }
 
 /* level select */
-.level-select { display: flex; gap: 14px; justify-content: center; margin: 0 auto 20px; max-width: 100%; }
+.chapter-tabs { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 0 auto 10px; }
+.chapter-tab {
+  font: 900 14px/1 var(--font); color: var(--ink); padding: 8px 14px; border-radius: 999px; cursor: pointer;
+  border: 2px solid var(--wood-2); background: rgba(255, 248, 232, .85); box-shadow: 0 2px 0 var(--wood-2);
+}
+.chapter-tab.on { background: #8ff07f; border-color: #1f5a22; box-shadow: 0 2px 0 #1f5a22; }
+.chapter-tab:disabled { cursor: not-allowed; opacity: .6; filter: grayscale(.6); }
+.chapter-count { margin-left: 6px; font-size: 11px; color: var(--ink-soft); }
+.level-select { display: flex; gap: 12px; justify-content: center; margin: 0 auto 20px; max-width: 100%; }
+.level-select .level-card { width: 196px; }
 .level-card {
   position: relative; display: grid; gap: 3px; justify-items: start; text-align: left; width: 230px; padding: 12px 14px 10px;
   border-radius: 14px; border: 3px solid var(--wood-2); color: var(--ink); font-family: var(--font); cursor: pointer;
@@ -380,6 +389,20 @@ b.bad { color: var(--bad); }
   .tutorial { display: none; }
   .selection-panel { bottom: 120px; }
   .start-wave { bottom: 112px; }
+}
+/* desktop widths where the centred toolbar (up to 12 tools) would run into the start-wave column:
+   slimmer buttons and a left-aligned toolbar; below 1280 px the start column moves above it */
+@media (min-width: 901px) and (max-width: 1640px) {
+  .hud:not(.touch) .hud-toolbar { left: 16px; transform: none; }
+  .hud.intro:not(.touch) .hud-toolbar { transform: translateY(20px); }
+  .hud:not(.touch) .tool-btn { width: 76px; }
+  .hud:not(.touch) .toolbar-group.terrain .tool-btn, .hud:not(.touch) .toolbar-group.small .tool-btn { width: 64px; }
+  .hud:not(.touch) .start-wave { width: 280px; }
+  .hud:not(.touch) .swp-enemies { max-width: 256px; }
+}
+@media (min-width: 901px) and (max-width: 1279px) {
+  .hud:not(.touch) .start-wave { bottom: 128px; }
+  .hud:not(.touch) .selection-panel { bottom: 262px; }
 }
 /* ------------------------------------------------------------------ touch */
 .chip-confirm { margin-left: 8px; font-weight: 900; color: #c9ffd0; }
@@ -566,7 +589,7 @@ b.bad { color: var(--bad); }
   .title-buttons .btn.big { padding: 10px 20px; font-size: 16px; }
   .title-foot { display: none; }
   .level-select { margin-bottom: 10px; gap: 8px; }
-  .level-card { width: 200px; padding: 8px 10px 6px; }
+  .level-card, .level-select .level-card { width: 170px; padding: 8px 10px 6px; }
   .level-card-name { font-size: 16px; }
   .level-card-meta, .level-card-stars { display: none; }
 }
@@ -613,8 +636,10 @@ b.bad { color: var(--bad); }
   .title-buttons .btn.big { width: min(260px, 78vw); }
   /* four levels in a 2×2 grid so the start button stays on screen on phones */
   .title-card { padding: calc(12px + var(--sat)) calc(12px + var(--sar)) calc(12px + var(--sab)) calc(12px + var(--sal)); }
-  .level-select { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: min(440px, 94vw); margin-bottom: 14px; }
-  .level-card { width: auto; min-width: 0; padding: 8px 10px 6px; }
+  .level-select { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; width: min(480px, 96vw); margin-bottom: 12px; }
+  .level-card, .level-select .level-card { width: auto; min-width: 0; padding: 8px 8px 6px; }
+  .chapter-tabs { gap: 4px; margin-bottom: 8px; }
+  .chapter-tab { font-size: 12px; padding: 6px 9px; }
   .level-card-name { font-size: 15px; }
   .level-card-sub, .level-card-meta { display: none; }
   .level-card-stars svg { width: 14px; height: 14px; }
@@ -626,7 +651,7 @@ b.bad { color: var(--bad); }
   .title-tag { margin: 12px 0 14px; font-size: 14px; }
 }
 @media (max-height: 520px) {
-  .level-select { grid-template-columns: repeat(4, minmax(0, 1fr)); width: min(760px, 94vw); }
+  .level-select { grid-template-columns: repeat(5, minmax(0, 1fr)); width: min(860px, 96vw); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -705,4 +730,13 @@ b.bad { color: var(--bad); }
 @media (orientation: landscape) and (max-height: 400px) {
   .title-tag { display: none; }
   .logo-sub { margin-top: 6px; }
+  .title-logo { margin: 0 0 4px; }
+  .logo-main { font-size: 32px; }
+  .chapter-tabs { margin: 6px auto 4px; }
+  .chapter-tab { padding: 4px 8px; font-size: 11px; }
+  .level-select { margin-bottom: 6px; }
+  .level-card, .level-select .level-card { padding: 5px 7px 4px; }
+  .level-card-id { margin-top: 0; }
+  .level-card-name { font-size: 13px; }
+  .level-card-stars { display: none; }
 }

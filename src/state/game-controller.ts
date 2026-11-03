@@ -2,7 +2,7 @@ import type {
   CellId, CommandResult, GameCommand, GameEvent, GameState, LevelDef, RuntimeFlags, TowerInstance,
 } from '../domain/types';
 import { STEP_SECONDS, ECONOMY, TOWER_DEFS, TRAP_DEF } from '../domain/definitions';
-import { createInitialState, advanceOneTick } from '../simulation/engine';
+import { createInitialState, advanceOneTick, flightLaneCells } from '../simulation/engine';
 import { wavePreview } from '../simulation/waves';
 import { createSession, dispatch, type PrepareSession } from '../session/undo-history';
 import { executeCommand, resolveTowerFootprint } from '../commands/execute';
@@ -53,6 +53,11 @@ export class GameController implements SceneFeed {
   }
 
   // ---- SceneFeed ------------------------------------------------------------------------
+  private lanes: CellId[][] | null = null;
+  flightLanes(): CellId[][] {
+    if (!this.lanes) { const index = indexLevel(this.level); this.lanes = this.level.portals.map((p) => flightLaneCells(this.level, { index }, p.cellId)); }
+    return this.lanes;
+  }
   elevationOf(cellId: CellId): number {
     return this.state.editedElevations[cellId] ?? indexLevel(this.level).cells.get(cellId)?.elevation ?? 0;
   }

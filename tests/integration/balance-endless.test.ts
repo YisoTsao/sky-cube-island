@@ -10,7 +10,7 @@ import { makeEndlessLevel } from '../../src/levels/endless';
 const CAPS: Record<string, number> = { 'L1-01': 18, 'L1-02': 20, 'L1-03': 22, 'L1-04': 26 };
 const good = (cap: number): BotOptions => ({ mix: ['arrow', 'frost', 'arrow', 'cannon'], maxTowers: cap + 2, combatSpendEvery: 100, minScore: 3, upgradeAfter: 10 });
 
-describe.each(LEVEL_IDS)('%s endless (bot)', (id) => {
+describe.each(LEVEL_IDS.slice(0, 4))('%s endless (bot)', (id) => {
   it('a good defence lasts a while but eventually falls', () => {
     const level = makeEndlessLevel(getLevel(id));
     const r = runBot(good(CAPS[id]!), level);

@@ -39,4 +39,6 @@ export interface SceneFeed {
   /** Current routes per portal (PREPARE preview or frozen COMBAT routes). */
   routes(): Record<string, CellId[]>;
   rangeForTower(towerId: string): RangeCell[];
+  /** Cells under each portal's straight flyer lane (static per level). */
+  flightLanes(): CellId[][];
 }

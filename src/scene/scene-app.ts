@@ -407,6 +407,10 @@ export class SceneApp {
     this.lastRoutesKey = key;
     this.overlay.setRoutes(routes, sweep && changed);
   }
+  private nextWaveHasFlyers(): boolean {
+    const w = this.level.waves[this.feed.state.currentWaveIndex];
+    return !!w && w.entries.some((e) => ENEMY_DEFS[e.enemyKind].flying);
+  }
   refreshRoutes(sweep: boolean) { this.applyRoutes(this.preview?.ok && this.preview.routes ? this.preview.routes : this.feed.routes(), sweep); }
 
   worldToScreen(p: Vector3): { x: number; y: number; visible: boolean } {
@@ -895,6 +899,10 @@ export class SceneApp {
     } else if (sel?.type === 'wall' || sel?.type === 'cell') {
       const cid = sel.type === 'wall' ? s.walls.find((w) => w.id === sel.id)?.cellId : sel.id;
       if (cid) ov.pushCell(cid, TACTICAL.select, 0.9, 5, 0.06);
+    }
+    // flyer lanes: when the coming wave has flyers, mark the straight lines they will take
+    if (prepare && this.nextWaveHasFlyers()) {
+      for (const cells of this.feed.flightLanes()) for (const c of cells) ov.pushCell(c, 0x7ff0d8, 0.28, 1, 0.035, 0.5);
     }
     // leak trails (red footprints fading)
     this.leakTrails = this.leakTrails.filter((l) => (l.t -= dt) > 0 || phase === 'WAVE_RESULT' || phase === 'DEFEAT');
