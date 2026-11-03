@@ -17,7 +17,7 @@ export const CHAPTERS: ChapterDef[] = [
 
 export const GENERATED_SPECS: GeneratedLevelSpec[] = [
   {
-    id: 'L1-05', name: '雲端前哨', subtitle: '飛龍初現・陷阱與拆橋教學', theme: 'day', seed: 1501, initialGold: 420,
+    id: 'L1-05', name: '雲端前哨', subtitle: '飛龍初現・陷阱與拆橋教學', theme: 'day', weather: 'rain', seed: 1501, initialGold: 420,
     layout: { sides: ['N', 'W', 'E'], hubs: ['N'], doubleBridge: ['N'], corners: ['NW', 'NE'], coreElevation: 3, pillars: 2 },
     plan: { roster: ['slime', 'runner', 'mini', 'wyvern', 'knight', 'boar', 'wisp'], finalBoss: 'boss', waves: 6, density: 0.85, hp: [0.6, 1.3] },
   },
@@ -27,17 +27,17 @@ export const GENERATED_SPECS: GeneratedLevelSpec[] = [
     plan: { roster: ['slime', 'runner', 'ram', 'bat', 'wyvern', 'splitter', 'boar'], finalBoss: 'queen', waves: 6, density: 1.8, hp: [0.6, 1.4] },
   },
   {
-    id: 'L2-02', name: '雙峰吊橋', subtitle: '兩條長橋・拆一座逼敵人繞遠路', theme: 'dusk', seed: 2202, initialGold: 460,
+    id: 'L2-02', name: '雙峰吊橋', subtitle: '兩條長橋・拆一座逼敵人繞遠路', theme: 'dusk', weather: 'fog', seed: 2202, initialGold: 460,
     layout: { sides: ['N', 'E', 'S', 'W'], hubs: ['E', 'W'], doubleBridge: ['E'], corners: ['NE', 'SW'], coreElevation: 3, pillars: 3 },
     plan: { roster: ['slime', 'mini', 'ghost', 'ram', 'wyvern', 'crab', 'shaman'], finalBoss: 'boss', waves: 6, density: 0.72, hp: [0.6, 1.45] },
   },
   {
-    id: 'L2-03', name: '霜風峽谷', subtitle: '雪地上的飛龍群', theme: 'snow', seed: 2305, initialGold: 480,
+    id: 'L2-03', name: '霜風峽谷', subtitle: '雪地上的飛龍群', theme: 'snow', weather: 'snow', seed: 2305, initialGold: 480,
     layout: { sides: ['N', 'E', 'W'], portals: { N: 2 }, hubs: ['N'], doubleBridge: ['N'], corners: ['NE', 'NW'], coreElevation: 3, pillars: 2 },
     plan: { roster: ['slime', 'bat', 'yeti', 'wyvern', 'ram', 'mole', 'shaman'], finalBoss: 'frostGiant', waves: 7, density: 1, hp: [0.65, 1.5] },
   },
   {
-    id: 'L2-04', name: '紫晶迴廊', subtitle: '五座橋・路線千變萬化', theme: 'dusk', seed: 2404, initialGold: 500,
+    id: 'L2-04', name: '紫晶迴廊', subtitle: '五座橋・路線千變萬化', theme: 'dusk', weather: 'rain', seed: 2404, initialGold: 500,
     layout: { sides: ['N', 'E', 'S', 'W'], hubs: ['N', 'S'], corners: ['NE', 'SE', 'SW', 'NW'], coreElevation: 4, pillars: 3 },
     plan: { roster: ['runner', 'mini', 'splitter', 'crab', 'wyvern', 'ram', 'wisp', 'ghost'], finalBoss: 'queen', midBosses: { 3: 'boss' }, waves: 7, density: 0.85, hp: [0.65, 1.55] },
   },
@@ -47,12 +47,12 @@ export const GENERATED_SPECS: GeneratedLevelSpec[] = [
     plan: { roster: ['slime', 'imp', 'salamander', 'wyvern', 'ram', 'knight', 'shaman', 'boar'], finalBoss: 'phoenix', midBosses: { 3: 'queen' }, waves: 7, density: 0.62, hp: [0.65, 1.55] },
   },
   {
-    id: 'L3-01', name: '深淵入口', subtitle: '五個入口・第三章開始', theme: 'dusk', seed: 3101, initialGold: 540,
+    id: 'L3-01', name: '深淵入口', subtitle: '五個入口・第三章開始', theme: 'dusk', weather: 'fog', seed: 3101, initialGold: 540,
     layout: { sides: ['N', 'E', 'S', 'W'], portals: { N: 2 }, hubs: ['E', 'W'], corners: ['NE', 'NW', 'SE'], coreElevation: 3, pillars: 3 },
     plan: { roster: ['slime', 'runner', 'bat', 'wyvern', 'ram', 'ghost', 'crab', 'wisp'], finalBoss: 'boss', midBosses: { 3: 'queen' }, waves: 7, density: 0.85, hp: [0.65, 1.6] },
   },
   {
-    id: 'L3-02', name: '冰晶墓園', subtitle: '幽靈與巨猿的雪夜', theme: 'snow', seed: 3202, initialGold: 560,
+    id: 'L3-02', name: '冰晶墓園', subtitle: '幽靈與巨猿的雪夜', theme: 'snow', weather: 'snow', seed: 3202, initialGold: 560,
     layout: { sides: ['N', 'E', 'S', 'W'], portals: { E: 2 }, hubs: ['N', 'S'], doubleBridge: ['S'], corners: ['NE', 'SW', 'NW'], coreElevation: 3, pillars: 3 },
     plan: { roster: ['mini', 'ghost', 'yeti', 'bat', 'wyvern', 'shaman', 'ram', 'mole'], finalBoss: 'frostGiant', midBosses: { 3: 'boss' }, waves: 7, density: 0.68, hp: [0.65, 1.6] },
   },
@@ -62,12 +62,12 @@ export const GENERATED_SPECS: GeneratedLevelSpec[] = [
     plan: { roster: ['imp', 'salamander', 'runner', 'wyvern', 'ram', 'crab', 'knight', 'shaman'], finalBoss: 'phoenix', midBosses: { 3: 'frostGiant' }, waves: 7, density: 0.75, hp: [0.65, 1.5] },
   },
   {
-    id: 'L3-04', name: '天穹花園', subtitle: '一切怪物齊聚的花海', theme: 'day', seed: 3404, initialGold: 720,
+    id: 'L3-04', name: '天穹花園', subtitle: '一切怪物齊聚的花海', theme: 'day', weather: 'rain', seed: 3404, initialGold: 720,
     layout: { sides: ['N', 'E', 'S', 'W'], portals: { E: 2, W: 2 }, hubs: ['N', 'S'], doubleBridge: ['N', 'S'], corners: ['NE', 'SE', 'SW', 'NW'], coreElevation: 3, pillars: 4 },
     plan: { roster: ['slime', 'mini', 'splitter', 'boar', 'wyvern', 'ram', 'wisp', 'ghost', 'shaman'], finalBoss: 'queen', midBosses: { 2: 'boss', 4: 'phoenix' }, waves: 7, density: 0.45, hp: [0.65, 1.5] },
   },
   {
-    id: 'L3-05', name: '守護之心', subtitle: '最終決戰・六個入口與三大頭目', theme: 'ember', seed: 3505, initialGold: 800,
+    id: 'L3-05', name: '守護之心', subtitle: '最終決戰・六個入口與三大頭目', theme: 'ember', weather: 'fog', seed: 3505, initialGold: 800,
     layout: { sides: ['N', 'E', 'S', 'W'], portals: { N: 2, E: 1, S: 2, W: 1 }, hubs: ['E', 'W'], doubleBridge: ['E', 'W'], corners: ['NE', 'SW', 'NW', 'SE'], coreElevation: 4, pillars: 4 },
     plan: { roster: ['imp', 'runner', 'bat', 'wyvern', 'ram', 'boar', 'ghost', 'shaman', 'yeti', 'wisp'], finalBoss: 'phoenix', midBosses: { 3: 'frostGiant' }, waves: 7, density: 0.55, hp: [0.65, 1.5] },
   },

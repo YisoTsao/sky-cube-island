@@ -12,6 +12,8 @@ import { challengesFor } from '../domain/challenges';
 import { readSave } from '../persistence/save';
 import { launchLevel } from './launch';
 import { CHAPTERS } from '../levels/campaign';
+import { dailyIdFor, makeDailyLevel, todayString } from '../levels/daily';
+import { WEATHER_NAME } from './Hud';
 
 applyInitialSettings();
 const params = new URLSearchParams(location.search);
@@ -45,6 +47,27 @@ function LevelCard({ id, selected, onPick }: { id: LevelId; selected: boolean; o
   );
 }
 
+function DailyCard({ date }: { date: string }) {
+  const progress = useUi((s) => s.progress);
+  const l = makeDailyLevel(date);
+  const id = dailyIdFor(date);
+  const rec = progress.records?.[id];
+  const best = progress.best[id] ?? 0;
+  const kinds = new Set(l.waves.flatMap((w) => w.entries.map((e) => e.enemyKind)));
+  return (
+    <div className={`level-card daily selected theme-${l.theme ?? 'day'}`}>
+      <span className="level-card-id">每日挑戰・{date}</span>
+      <span className="level-card-name">{l.name}</span>
+      <span className="level-card-sub">{l.daily?.modifiers.join('・')}{l.weather && l.weather !== 'clear' ? `・${WEATHER_NAME[l.weather]}` : ''}</span>
+      <span className="level-card-meta">{l.waves.length} 波 · {l.portals.length} 個入口 · {kinds.size} 種怪物 · 起始 {l.initialGold} 金</span>
+      <span className="level-card-stars">
+        {[1, 2, 3].map((i) => <StarIcon key={i} filled={best >= i} size={18} />)}
+        {rec && rec.bestHp > 0 ? <span className="level-card-best">今日最佳 {rec.bestHp}♥</span> : <span className="level-card-best">每天換一座新島，所有玩家同一張地圖</span>}
+      </span>
+    </div>
+  );
+}
+
 function Title() {
   const hasSave = useUi((s) => s.hasSave);
   const progress = useUi((s) => s.progress);
@@ -59,8 +82,10 @@ function Title() {
   });
   const [chapter, setChapter] = useState(() => Math.max(0, CHAPTERS.findIndex((c) => c.levelIds.includes(picked))));
   const [endless, setEndless] = useState(false);
-  const endlessOpen = isEndlessUnlocked(picked, progress);
-  const playId = endless && endlessOpen ? endlessIdOf(picked) : picked;
+  const isDaily = chapter === CHAPTERS.length;
+  const [today] = useState(() => todayString());
+  const endlessOpen = !isDaily && isEndlessUnlocked(picked, progress);
+  const playId = isDaily ? dailyIdFor(today) : endless && endlessOpen ? endlessIdOf(picked) : picked;
   useEffect(() => {
     useUi.getState().set({ hasSave: false });
     void readSave(playId).then((v) => useUi.getState().set({ hasSave: !!v }));
@@ -99,11 +124,16 @@ function Title() {
               </button>
             );
           })}
+          <button role="tab" aria-selected={isDaily} className={`chapter-tab daily ${isDaily ? 'on' : ''}`} title="每天一座新島，所有玩家同一張地圖" onClick={() => { audio.play('click'); setChapter(CHAPTERS.length); }}>
+            ☀ 每日挑戰
+          </button>
         </div>
         <div className="level-select" role="group" aria-label="選擇關卡">
-          {(CHAPTERS[chapter]?.levelIds ?? LEVEL_IDS).map((id) => <LevelCard key={id} id={id as LevelId} selected={picked === id} onPick={() => { audio.play('click'); setPicked(id as LevelId); }} />)}
+          {isDaily
+            ? <DailyCard date={today} />
+            : (CHAPTERS[chapter]?.levelIds ?? LEVEL_IDS).map((id) => <LevelCard key={id} id={id as LevelId} selected={picked === id} onPick={() => { audio.play('click'); setPicked(id as LevelId); }} />)}
         </div>
-        <div className="mode-switch" role="group" aria-label="遊戲模式">
+        <div className="mode-switch" role="group" aria-label="遊戲模式" hidden={isDaily}>
           <button className={`mode-btn ${!endless || !endlessOpen ? 'on' : ''}`} aria-pressed={!endless || !endlessOpen} onClick={() => { audio.play('click'); setEndless(false); }}>戰役</button>
           <button
             className={`mode-btn ${endless && endlessOpen ? 'on' : ''}`} aria-pressed={endless && endlessOpen} disabled={!endlessOpen}

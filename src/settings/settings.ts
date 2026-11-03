@@ -15,6 +15,7 @@ export const DEFAULT_SETTINGS: SettingsV1 = {
   uiScale: 1,
   volume: { master: 0.8, music: 0.55, sfx: 0.8, ui: 0.7, ambience: 0.6 },
   language: 'zh-TW',
+  weather: true,
 };
 
 /** Settings live apart from game saves (D21-11). Every access is try/catch'd. */

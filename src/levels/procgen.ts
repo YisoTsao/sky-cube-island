@@ -1,4 +1,4 @@
-import type { ConnectorKind, EnemyKind, GridPos, LevelDef, LevelTheme, WaveDef } from '../domain/types';
+import type { ConnectorKind, EnemyKind, GridPos, LevelDef, LevelTheme, WaveDef, WeatherKind } from '../domain/types';
 import { ENEMY_DEFS } from '../domain/definitions';
 import { buildLevel, paced, type LegendEntry, type Rect } from './builder';
 import { validateLevel } from './level-validator';
@@ -55,6 +55,7 @@ export interface GeneratedLevelSpec {
   name: string;
   subtitle?: string;
   theme: LevelTheme;
+  weather?: WeatherKind;
   seed: number;
   layout: IslandLayout;
   plan: WavePlan;
@@ -295,7 +296,7 @@ function toLevel(spec: GeneratedLevelSpec, waves: WaveDef[], seed: number): Leve
     maxShortestPathCost: 260,
     waves: waves.map((w) => ({ ...w, entries: w.entries.map((e) => ({ ...e, portalIds: e.portalIds.filter((p) => g.portals.some((q) => q.id === p)) })) })),
   });
-  return level;
+  return spec.weather && spec.weather !== 'clear' ? { ...level, weather: spec.weather } : level;
 }
 
 /** Wave list from a plan: kinds join in roster order, budgets grow, bosses on their waves. */

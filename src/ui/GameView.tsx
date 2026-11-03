@@ -94,6 +94,7 @@ export function GameView() {
       damageNumbers: ui.settings.damageNumbers,
       colorblind: ui.settings.colorblindSafe,
       dynamicResolution: ui.settings.dynamicResolution,
+      weather: ui.settings.weather !== false && !params.has('visualTest'),
       visualTest: params.has('visualTest'),
     });
     runtime.scene = scene;
@@ -446,6 +447,7 @@ export function GameView() {
         scene.applyOptions({
           quality: q, reducedMotion: s.settings.reducedMotion, screenShake: s.settings.screenShake,
           damageNumbers: s.settings.damageNumbers, colorblind: s.settings.colorblindSafe, dynamicResolution: s.settings.dynamicResolution,
+          weather: s.settings.weather !== false && !params.has('visualTest'),
         });
         if (q !== s.qualityLabel) useUi.getState().set({ qualityLabel: q });
         audio.setVolumes(s.settings.volume);
