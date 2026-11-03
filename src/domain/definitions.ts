@@ -14,11 +14,15 @@ export const TOWER_DEFS: Record<TowerKind, TowerDef> = {
     kind: 'frost', name: '冰晶塔', buildCost: 85, baseDamage: 16, baseRangeWorld: 2.8,
     cooldownTicks: 27, damageType: 'magic', muzzleOffsetWorld: 1.4, projectileTicks: 5,
     slow: { ratio: 0.3, durationTicks: 36 },
+    // v2.8: the slow itself grows with the tower (30% / 38% / 45%).
+    perLevel: { slowRatio: [0.3, 0.38, 0.45] },
   },
   cannon: {
     kind: 'cannon', name: '岩石砲塔', buildCost: 105, baseDamage: 45, baseRangeWorld: 3.1,
     cooldownTicks: 52, damageType: 'physical', muzzleOffsetWorld: 1.1, projectileTicks: 8,
     blastRadiusWorld: 1.05,
+    // v2.8: the blast widens with each level.
+    perLevel: { blastRadiusWorld: [1.05, 1.2, 1.35] },
   },
   // v2.5 (GDD §16 T2): chain lightning and knock-back wind.
   lightning: {
@@ -112,6 +116,18 @@ export const ENEMY_DEFS: Record<EnemyKind, EnemyDef> = {
   },
 };
 
+/**
+ * Late-wave enemy HP bonus (v2.8). Raised alongside the stronger tower upgrades so the campaign
+ * keeps its difficulty. It ramps from +0% on the first wave to the full bonus by the sixth (or the
+ * last) wave, because upgrades only exist later in a level: the opening waves stay as they were.
+ */
+export const LATE_WAVE_HP_BONUS = 0.28;
+
+export function waveHpMultiplier(waveIndex: number, waveCount: number): number {
+  const ramp = Math.max(1, Math.min(waveCount - 1, 5));
+  return 1 + LATE_WAVE_HP_BONUS * Math.min(1, waveIndex / ramp);
+}
+
 /** 1×1 spike trap (GDD §16 T2): hits every ground enemy standing on its cell, then recharges. */
 export const TRAP_DEF = { cost: 40, refund: 20, damage: 34, damageType: 'physical' as const, cooldownTicks: 20 };
 
@@ -128,13 +144,52 @@ export const ECONOMY = {
   maxUndo: 20,
 } as const;
 
-/** Level multipliers relative to Lv1 (GDD §7). */
-export const LEVEL_DAMAGE_MULT: Record<TowerLevel, number> = { 1: 1, 2: 1.3, 3: 1.7 };
-export const LEVEL_RANGE_BONUS: Record<TowerLevel, number> = { 1: 0, 2: 0.2, 3: 0.4 };
+/** Highest tower level. Every per-level table below is indexed by level (1-based). */
+export const MAX_TOWER_LEVEL = 3;
+export const TOWER_LEVELS: readonly TowerLevel[] = [1, 2, 3];
 
-export function upgradeCost(kind: TowerKind, toLevel: 2 | 3): number {
-  const base = TOWER_DEFS[kind].buildCost;
-  return toLevel === 2 ? Math.ceil(base * 0.7) : Math.ceil(base * 1.1);
+/** Level multipliers relative to Lv1 (GDD §7; v2.8 raised 1.3/1.7 → 1.45/2.0 so upgrading pays). */
+export const LEVEL_DAMAGE_MULT: Record<TowerLevel, number> = { 1: 1, 2: 1.45, 3: 2.0 };
+export const LEVEL_RANGE_BONUS: Record<TowerLevel, number> = { 1: 0, 2: 0.2, 3: 0.4 };
+/** Upgrade cost into each level, as a fraction of the build cost. */
+const UPGRADE_COST_RATIO: Partial<Record<TowerLevel, number>> = { 2: 0.7, 3: 1.1 };
+
+export function nextTowerLevel(level: TowerLevel): TowerLevel | null {
+  return level < MAX_TOWER_LEVEL ? ((level + 1) as TowerLevel) : null;
+}
+
+export function upgradeCost(kind: TowerKind, toLevel: TowerLevel): number {
+  return Math.ceil(TOWER_DEFS[kind].buildCost * (UPGRADE_COST_RATIO[toLevel] ?? 0));
+}
+
+/** Everything a tower does at a given level, resolved in one place (simulation, HUD, docs). */
+export interface TowerLevelStats {
+  damage: number;
+  rangeBonus: number;
+  slow?: { ratio: number; durationTicks: number };
+  blastRadiusWorld?: number;
+  chainJumps?: number;
+  knockbackCells?: number;
+  knockbackTargets?: number;
+}
+
+export function towerStats(kind: TowerKind, level: TowerLevel): TowerLevelStats {
+  const d = TOWER_DEFS[kind];
+  const i = level - 1;
+  const out: TowerLevelStats = { damage: d.baseDamage * LEVEL_DAMAGE_MULT[level], rangeBonus: LEVEL_RANGE_BONUS[level] };
+  if (d.slow) out.slow = { ratio: d.perLevel?.slowRatio?.[i] ?? d.slow.ratio, durationTicks: d.slow.durationTicks };
+  if (d.blastRadiusWorld) out.blastRadiusWorld = d.perLevel?.blastRadiusWorld?.[i] ?? d.blastRadiusWorld;
+  if (d.chain) out.chainJumps = d.chain.jumps + i;
+  if (d.knockback) {
+    out.knockbackCells = d.knockback.cells + d.knockback.perLevel * i;
+    out.knockbackTargets = d.knockback.maxTargets + i;
+  }
+  return out;
+}
+
+/** High-ground range bonus for a tower `elevationDiff` levels above its target (capped). */
+export function highGroundBonus(elevationDiff: number): number {
+  return HIGH_GROUND_PER_LEVEL * Math.min(HIGH_GROUND_MAX_LEVELS, Math.max(0, elevationDiff));
 }
 
 export function sellRefund(investedGold: number): number {

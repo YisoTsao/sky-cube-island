@@ -3,7 +3,7 @@ import {
   Color, CanvasTexture, Sprite, SpriteMaterial, type BufferGeometry,
 } from 'three';
 import type { CellId, EnemyInstance, EnemyKind, GameEvent, GameState, LevelDef } from '../domain/types';
-import { ENEMY_DEFS, LEVEL_RANGE_BONUS, TOWER_DEFS, isBurrowed, isEnraged } from '../domain/definitions';
+import { ENEMY_DEFS, LEVEL_RANGE_BONUS, TOWER_DEFS, isBurrowed, isEnraged, towerStats } from '../domain/definitions';
 import { HEIGHT_STEP_WORLD } from '../domain/types';
 import type { PreviewInfo, RangeCell, SceneFeed } from '../presentation/feed';
 import { RenderPipeline, QUALITY, type QualityLevel } from './render/pipeline';
@@ -687,7 +687,9 @@ export class SceneApp {
             this.vfx.smoke(at, 6);
             const g = this.groundAt(at.x, at.z);
             if (g > -50) this.vfx.scorch(new Vector3(at.x, g, at.z));
-            this.vfx.ring(new Vector3(at.x, g, at.z), 1.1, 'lantern', 0.35);
+            const tw = ctx.state.towers.find((x) => x.id === e.towerId);
+            const radius = tw ? towerStats(tw.kind, tw.level).blastRadiusWorld ?? 1.05 : 1.05;
+            this.vfx.ring(new Vector3(at.x, g, at.z), radius + 0.05, 'lantern', 0.35);
             this.rig.addTrauma(0.12);
           });
           break;

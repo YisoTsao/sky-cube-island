@@ -2,7 +2,7 @@ import type {
   CellId, EnemyInstance, GameEvent, GameState, LevelDef, TargetingMode, TowerInstance, Vec3,
 } from '../domain/types';
 import { HEIGHT_STEP_WORLD } from '../domain/types';
-import { ENEMY_DEFS, LEVEL_DAMAGE_MULT, TOWER_DEFS, TPS, TRAP_DEF, isBurrowed, isEnraged, starsForHp } from '../domain/definitions';
+import { ENEMY_DEFS, TOWER_DEFS, TPS, TRAP_DEF, isBurrowed, isEnraged, starsForHp, towerStats, waveHpMultiplier } from '../domain/definitions';
 import { buildNavigationGraph } from '../navigation/build-graph';
 import { findPathToCore } from '../navigation/astar';
 
@@ -131,9 +131,10 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
   const breakerRoutes = new Map<string, CellId[]>();
 
   const hpScale = level.waves[state.currentWaveIndex]?.hpScale ?? 1;
+  const hpBonus = waveHpMultiplier(state.currentWaveIndex, level.waves.length);
   // traps keep some bite in later, tougher waves
   const hpScaleDamage = Math.max(1, Math.sqrt(hpScale));
-  const spawnHp = (kind: EnemyInstance['kind']) => Math.max(1, Math.round(ENEMY_DEFS[kind].hp * hpScale));
+  const spawnHp = (kind: EnemyInstance['kind']) => Math.max(1, Math.round(ENEMY_DEFS[kind].hp * hpScale * hpBonus));
 
   // 1. Spawn
   while (spawnCursor < state.spawnQueue.length && state.spawnQueue[spawnCursor]!.tick <= state.waveTick) {
@@ -166,7 +167,7 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
   for (const e of enemies) {
     if (e.state !== 'moving') continue;
     const def = ENEMY_DEFS[e.kind];
-    const slowRatio = e.slowUntilTick > tick ? (TOWER_DEFS.frost.slow?.ratio ?? 0) * (1 - (def.slowResistance ?? 0)) : 0;
+    const slowRatio = e.slowUntilTick > tick ? (e.slowRatio ?? TOWER_DEFS.frost.slow?.ratio ?? 0) * (1 - (def.slowResistance ?? 0)) : 0;
     const rage = isEnraged(e) ? def.enrage!.speedMult : 1;
     if (def.breaksWalls) {
       // stop halfway into the cell before a wall and hammer it down
@@ -250,7 +251,7 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
   type HitSource = { id: string; damageType: 'physical' | 'magic'; slow?: { ratio: number; durationTicks: number } };
   type HitDef = Omit<HitSource, 'id'>;
   const applyHit = (t: TowerInstance | HitSource, v: EnemyInstance, raw: number): void => {
-    const def: HitDef = 'kind' in t ? TOWER_DEFS[t.kind] : t;
+    const def: HitDef = 'kind' in t ? { damageType: TOWER_DEFS[t.kind].damageType, slow: towerStats(t.kind, t.level).slow } : t;
     const edef = ENEMY_DEFS[v.kind];
     const resist = def.damageType === 'physical' ? edef.physicalResistance : (edef.magicResistance ?? 0);
     const shield = shielding(v);
@@ -259,6 +260,9 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
     v.hp = Math.max(0, v.hp - amount);
     events.push({ type: 'ENEMY_DAMAGED', tick, enemyId: v.id, sourceTowerId: t.id, amount, damageType: def.damageType, resisted, hpAfter: v.hp });
     if (def.slow && v.hp > 0) {
+      // a weaker slow never overrides a stronger one that is still running
+      const active = v.slowUntilTick > tick ? (v.slowRatio ?? 0) : 0;
+      v.slowRatio = Math.max(active, def.slow.ratio);
       v.slowUntilTick = tick + def.slow.durationTicks;
       events.push({ type: 'ENEMY_SLOWED', tick, enemyId: v.id, untilTick: v.slowUntilTick });
     }
@@ -331,13 +335,14 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
     const target = candidates[0]!;
     t.cooldownTicks = def.cooldownTicks;
     events.push({ type: 'TOWER_FIRED', tick, towerId: t.id, targetId: target.e.id, travelTicks: def.projectileTicks });
-    const raw = def.baseDamage * LEVEL_DAMAGE_MULT[t.level];
+    const lv = towerStats(t.kind, t.level);
+    const raw = lv.damage;
 
-    if (def.blastRadiusWorld) {
+    if (lv.blastRadiusWorld) {
       const victims: EnemyInstance[] = [];
       for (const e of enemies) {
         if (e.state !== 'moving' || isBurrowed(e, tick)) continue;
-        if (distance3D(aimPoint(map, e).p, target.p) <= def.blastRadiusWorld) victims.push(e);
+        if (distance3D(aimPoint(map, e).p, target.p) <= lv.blastRadiusWorld) victims.push(e);
       }
       events.push({ type: 'CANNON_EXPLODED', tick, towerId: t.id, at: target.p, hitIds: victims.map((v) => v.id) });
       for (const v of victims) applyHit(t, v, raw);
@@ -346,7 +351,7 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
       const hit: Candidate[] = [target];
       const hitSet = new Set<string>([target.e.id]);
       let from = target.p;
-      for (let j = 0; j < def.chain.jumps + t.level - 1; j++) {
+      for (let j = 0; j < lv.chainJumps!; j++) {
         let best: Candidate | null = null;
         for (const e of enemies) {
           if (e.state !== 'moving' || hitSet.has(e.id) || isBurrowed(e, tick)) continue;
@@ -365,9 +370,9 @@ export function advanceOneTick(state: GameState, level: LevelDef): TickResult {
     } else if (def.knockback) {
       // Wind gust: hit several enemies in range, then push the survivors back along their route.
       const kb = def.knockback;
-      const victims = candidates.slice(0, kb.maxTargets + t.level - 1).map((c) => c.e);
+      const victims = candidates.slice(0, lv.knockbackTargets!).map((c) => c.e);
       events.push({ type: 'WIND_GUST', tick, towerId: t.id, hitIds: victims.map((v) => v.id) });
-      const push = kb.cells + kb.perLevel * (t.level - 1);
+      const push = lv.knockbackCells!;
       for (const v of victims) {
         applyHit(t, v, raw);
         if (v.state !== 'moving' || (v.pushImmuneUntilTick ?? -1) > tick) continue;

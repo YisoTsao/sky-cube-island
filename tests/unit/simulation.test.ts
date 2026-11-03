@@ -4,7 +4,7 @@ import { executeCommand } from '../../src/commands/execute';
 import { advanceOneTick } from '../../src/simulation/engine';
 import { buildSpawnQueue } from '../../src/simulation/waves';
 import type { EnemyInstance, EnemyKind, GameCommand, GameEvent, GameState } from '../../src/domain/types';
-import { ENEMY_DEFS } from '../../src/domain/definitions';
+import { ENEMY_DEFS, waveHpMultiplier } from '../../src/domain/definitions';
 
 function apply(s: GameState, cmds: GameCommand[]): GameState {
   for (const c of cmds) {
@@ -200,7 +200,7 @@ describe('Enemy roster v2.2', () => {
     s = executeCommand(level, s, { type: 'START_WAVE' }).state;
     s = advanceOneTick(s, level).state;
     const e = s.enemies[0]!;
-    expect(e.maxHp).toBe(Math.round(ENEMY_DEFS[e.kind].hp * level.waves[4]!.hpScale!));
+    expect(e.maxHp).toBe(Math.round(ENEMY_DEFS[e.kind].hp * level.waves[4]!.hpScale! * waveHpMultiplier(4, level.waves.length)));
     expect(e.hp).toBe(e.maxHp);
   });
 });

@@ -1,8 +1,8 @@
 import { useEffect, useState, type ReactElement } from 'react';
-import type { EnemyKind, TargetingMode, TowerKind } from '../domain/types';
+import type { EnemyKind, TargetingMode, TowerKind, TowerLevel } from '../domain/types';
 import { TARGETING_MODES, TOWER_KINDS } from '../domain/types';
 import {
-  ECONOMY, ENEMY_DEFS, TRAP_DEF, HIGH_GROUND_PER_LEVEL, LEVEL_DAMAGE_MULT, LEVEL_RANGE_BONUS, TOWER_DEFS, sellRefund, upgradeCost,
+  ECONOMY, ENEMY_DEFS, TRAP_DEF, HIGH_GROUND_PER_LEVEL, LEVEL_RANGE_BONUS, MAX_TOWER_LEVEL, TOWER_DEFS, highGroundBonus, nextTowerLevel, sellRefund, towerStats, upgradeCost,
 } from '../domain/definitions';
 import { controller, level, runtime, syncStore } from '../app/runtime';
 import { executeCommand } from '../commands/execute';
@@ -27,19 +27,19 @@ const TARGETING_TIP: Record<TargetingMode, string> = {
   CLOSEST: '攻擊離塔最近的敵人',
 };
 const TOWER_BLURB: Record<TowerKind, string> = {
-  arrow: '單體物理傷害，射速快。高地加射程。',
-  frost: '魔法傷害並緩速 30%，無視鐵甲甲蟲的物抗。適合放在轉角。',
+  arrow: '單體物理傷害，射速快。蓋在高處打低處的敵人可加射程。',
+  frost: '魔法傷害並緩速 30%（升級後最高 45%），無視鐵甲甲蟲的物抗。適合放在轉角。',
   cannon: '範圍爆炸，對付成群敵人。巨人也怕砲擊。',
   lightning: '魔法閃電會連鎖跳到附近的敵人（每跳傷害 ×0.75），專剋成群小怪。',
   wind: '一次吹中多隻敵人並往回推，拖長牠們待在射程內的時間。頭目幾乎推不動。',
 };
 
-function towerSpecial(kind: TowerKind, lv: 1 | 2 | 3 = 1): string | null {
-  const d = TOWER_DEFS[kind];
-  if (d.chain) return `連鎖 ${d.chain.jumps + lv - 1} 次`;
-  if (d.knockback) return `推退 ${(d.knockback.cells + d.knockback.perLevel * (lv - 1)).toFixed(1)} 格 · 最多 ${d.knockback.maxTargets + lv - 1} 隻`;
-  if (d.slow) return `緩速 ${Math.round(d.slow.ratio * 100)}%`;
-  if (d.blastRadiusWorld) return '範圍爆炸';
+function towerSpecial(kind: TowerKind, lv: TowerLevel = 1): string | null {
+  const st = towerStats(kind, lv);
+  if (st.chainJumps !== undefined) return `連鎖 ${st.chainJumps} 次`;
+  if (st.knockbackCells !== undefined) return `推退 ${st.knockbackCells.toFixed(1)} 格 · 最多 ${st.knockbackTargets} 隻`;
+  if (st.slow) return `緩速 ${Math.round(st.slow.ratio * 100)}%`;
+  if (st.blastRadiusWorld) return `範圍爆炸 · 半徑 ${st.blastRadiusWorld.toFixed(2)}`;
   return null;
 }
 const ENEMY_TRAIT: Partial<Record<EnemyKind, string>> = {
@@ -151,7 +151,7 @@ function TopRight() {
           <button className="icon-btn" title="暫停 (Space)" onClick={() => { controller.flags.paused = !controller.flags.paused; syncStore(); audio.play('click'); }}>
             {paused ? <PlayIcon /> : <PauseIcon />}
           </button>
-          <button className={`icon-btn speed ${speed === 2 ? 'on' : ''}`} title="倍速" onClick={() => { controller.flags.speed = speed === 1 ? 2 : 1; syncStore(); audio.play('click'); }}>
+          <button className={`icon-btn speed ${speed > 1 ? 'on' : ''}`} title="倍速（1× → 2× → 3×）" onClick={() => { controller.flags.speed = speed === 3 ? 1 : ((speed + 1) as 2 | 3); syncStore(); audio.play('click'); }}>
             {speed}×
           </button>
         </div>
@@ -281,10 +281,13 @@ function SelectionPanel() {
     if (!t) return null;
     const def = TOWER_DEFS[t.kind];
     const elev = controller.elevationOf(t.anchorCellId);
-    const range = def.baseRangeWorld + LEVEL_RANGE_BONUS[t.level] + HIGH_GROUND_PER_LEVEL * elev;
-    const dmg = Math.round(def.baseDamage * LEVEL_DAMAGE_MULT[t.level]);
-    const nextLevel = t.level < 3 ? ((t.level + 1) as 2 | 3) : null;
+    // range against a target on the same height; high ground only adds range against lower targets
+    const range = def.baseRangeWorld + LEVEL_RANGE_BONUS[t.level];
+    const dmg = Math.round(towerStats(t.kind, t.level).damage);
+    const nextLevel = nextTowerLevel(t.level);
     const upCost = nextLevel ? upgradeCost(t.kind, nextLevel) : 0;
+    const next = nextLevel ? { dmg: Math.round(towerStats(t.kind, nextLevel).damage), range: def.baseRangeWorld + LEVEL_RANGE_BONUS[nextLevel], special: towerSpecial(t.kind, nextLevel) } : null;
+    const hgMax = highGroundBonus(elev);
     const cells = controller.rangeForTower(t.id);
     const blocked = cells.filter((c) => c.state === 'occluded').length;
     const stats = controller.waveStats.towers[t.id];
@@ -294,17 +297,19 @@ function SelectionPanel() {
           <TowerIcon kind={t.kind} size={44} />
           <div>
             <div className="sel-title">{def.name}</div>
-            <div className="sel-level">{'★'.repeat(t.level)}<span>{'★'.repeat(3 - t.level)}</span> Lv.{t.level}</div>
+            <div className="sel-level">{'★'.repeat(t.level)}<span>{'★'.repeat(MAX_TOWER_LEVEL - t.level)}</span> Lv.{t.level}</div>
           </div>
           <button className="close-btn" onClick={clearSelection} aria-label="關閉">×</button>
         </div>
         <div className="sel-stats">
-          <div><label>傷害</label><b>{dmg}</b></div>
-          <div><label>射程</label><b>{range.toFixed(1)}</b></div>
+          <div><label>傷害</label><b>{dmg}</b>{next && <i className="sel-next">→{next.dmg}</i>}</div>
+          <div><label>射程</label><b>{range.toFixed(1)}</b>{next && <i className="sel-next">→{next.range.toFixed(1)}</i>}</div>
           <div><label>高度</label><b>{elev}</b></div>
           {stats && <div><label>本波擊殺</label><b>{stats.kills}</b></div>}
         </div>
-        {towerSpecial(t.kind, t.level) && <div className="sel-note">{towerSpecial(t.kind, t.level)}</div>}
+        {towerSpecial(t.kind, t.level) && (
+          <div className="sel-note">{towerSpecial(t.kind, t.level)}{next?.special && next.special !== towerSpecial(t.kind, t.level) && <span className="sel-next"> → Lv.{nextLevel}：{next.special}</span>}</div>
+        )}
         {towersOpen && (
           <div className="sel-targeting" role="group" aria-label="索敵模式">
             <label title="按 T 切換">索敵</label>
@@ -314,7 +319,7 @@ function SelectionPanel() {
             ))}
           </div>
         )}
-        {elev > 1 && <div className="sel-note good">▲ 高地加成 +{(HIGH_GROUND_PER_LEVEL * elev).toFixed(1)} 射程</div>}
+        {hgMax > 0 && <div className="sel-note good">▲ 高地：打比自己低的敵人，每低 1 層射程 +{HIGH_GROUND_PER_LEVEL}（最多 +{hgMax.toFixed(1)}）</div>}
         {blocked > 0 && <div className="sel-note warn">◐ {blocked} 格被地形擋住視線（顯示為斜線）</div>}
         {towersOpen && (
           <div className="sel-actions">

@@ -200,6 +200,7 @@ kbd {
 .sel-stats div { background: rgba(255, 255, 255, .6); border-radius: 8px; padding: 5px 4px; text-align: center; }
 .sel-stats label { display: block; font-size: 10px; color: var(--ink-soft); font-weight: 700; }
 .sel-stats b { font-size: 16px; }
+.sel-next { font-style: normal; font-size: 11px; font-weight: 700; color: #2f8a3a; margin-left: 2px; }
 .sel-note { font-size: 12px; margin-top: 6px; padding: 5px 8px; border-radius: 7px; background: rgba(0, 0, 0, .05); }
 .sel-note.good { background: rgba(95, 196, 107, .18); color: #276b31; }
 .sel-note.warn { background: rgba(241, 163, 60, .18); color: #8a4b05; }

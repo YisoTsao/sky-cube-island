@@ -78,7 +78,7 @@ export function dailySpec(date: string): GeneratedLevelSpec & { modifier: string
     layout: { sides, hubs, corners, portals, doubleBridge: [pick(hubs)], coreElevation: 2 + Math.floor(r() * 3), pillars: 2 + Math.floor(r() * 3) },
     plan: {
       roster, finalBoss: pick(BOSSES), waves: 6 + (mod.waves ?? 0),
-      hp: [0.6 * (mod.hp ?? 1), 1.35 * (mod.hp ?? 1)],
+      hp: [0.6 * (mod.hp ?? 1), 1.2 * (mod.hp ?? 1)],
       density: Math.round(0.62 * (mod.density ?? 1) * (portalCount >= 5 ? 0.85 : 1) * 100) / 100,
     },
     modifier: mod.label,

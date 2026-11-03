@@ -38,7 +38,7 @@ export interface UiState {
   preview: PreviewInfo | null;
   toasts: Toast[];
   paused: boolean;
-  speed: 1 | 2;
+  speed: 1 | 2 | 3;
   canUndo: boolean;
   showAllRanges: boolean;
   settings: SettingsV1;
