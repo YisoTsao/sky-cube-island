@@ -9,6 +9,7 @@ import type { PreviewInfo, RangeCell, SceneFeed } from '../presentation/feed';
 import { RenderPipeline, QUALITY, type QualityLevel } from './render/pipeline';
 import { CameraRig } from './camera/camera-rig';
 import { Environment } from './environment/environment';
+import { AmbientLife } from './environment/ambient-life';
 import { Terrain } from './terrain/terrain';
 import { TacticalOverlay } from './overlay/overlay';
 import { Vfx } from './vfx/vfx';
@@ -73,6 +74,7 @@ export class SceneApp {
   readonly pipeline: RenderPipeline;
   readonly rig: CameraRig;
   readonly env: Environment;
+  readonly ambient: AmbientLife;
   readonly terrain: Terrain;
   readonly overlay: TacticalOverlay;
   readonly vfx: Vfx;
@@ -118,6 +120,8 @@ export class SceneApp {
     this.scene.add(this.env.group);
     this.scene.environment = this.env.buildEnvMap(this.pipeline.renderer);
     this.scene.environmentIntensity = 0.55;
+    this.ambient = new AmbientLife({ level: feed.level, center, groundAt: (x, z) => this.groundAt(x, z) });
+    this.scene.add(this.ambient.group);
 
     this.terrain = new Terrain({ level: feed.level, elevationOf: (id) => feed.elevationOf(id) });
     for (const m of this.terrain.group.children) m.layers.enable(RenderPipeline.DEPTH_LAYER);
@@ -312,6 +316,7 @@ export class SceneApp {
   }
 
   // ---------------------------------------------------------------- options
+  private ambientConfigured = false;
   applyOptions(o: Partial<SceneOptions>) {
     this.opts = { ...this.opts, ...o };
     const p = QUALITY[this.opts.quality];
@@ -320,6 +325,11 @@ export class SceneApp {
       this.env.setShadowSize(p.shadowSize);
       this.env.setCloudLayers(p.cloudLayers);
       this.vfx.setCapacity(p.particles);
+    }
+    if (o.quality !== undefined || o.reducedMotion !== undefined || !this.ambientConfigured) {
+      this.ambientConfigured = true;
+      const q = this.opts.quality;
+      this.ambient.configure({ birds: q === 'low' ? 1 : 2, particles: q === 'low' ? 0 : q === 'medium' ? 50 : q === 'high' ? 90 : 130, reducedMotion: this.opts.reducedMotion });
     }
     sharedUniforms.uWind.value = p.wind && !this.opts.reducedMotion ? 1 : 0;
     sharedUniforms.uRuneAnimate.value = p.runeAnimate && !this.opts.reducedMotion ? 1 : 0;
@@ -721,6 +731,7 @@ export class SceneApp {
     this.rig.update(dtEnv);
     this.env.update(dtEnv, this.rig.yaw, this.width / Math.max(1, this.height));
     this.terrain.update(dtEnv);
+    this.ambient.update(dtEnv);
     this.core.update(dtEnv, sharedUniforms.uTime.value);
     this.core.setHp(this.feed.state.coreHp);
     for (const p of this.portals.values()) p.update(dtEnv);
@@ -846,6 +857,27 @@ export class SceneApp {
       } else if (sp) sp.visible = false;
     }
     for (const [id, sp] of this.blockedSprites) if (!this.towers.has(id)) { ov.scene.remove(sp); this.blockedSprites.delete(id); }
+  }
+
+  // ---------------------------------------------------------------- photo mode (GDD §11.4 T1)
+  /** Free camera + look controls; presentation only, the simulation is paused by the caller. */
+  setPhotoMode(on: boolean) {
+    this.rig.photoZoom = on;
+    if (!on) {
+      this.pipeline.overlayEnabled = true;
+      this.pipeline.setLook({ filter: 0, tiltShift: 0, focus: 0.5 });
+      this.rig.setOrbit(false);
+    }
+  }
+  setPhotoLook(l: { filter: number; tiltShift: number; focus: number; hideTactical: boolean; orbit: boolean }) {
+    this.pipeline.setLook(l);
+    this.pipeline.overlayEnabled = !l.hideTactical;
+    this.rig.setOrbit(l.orbit, 0.18);
+  }
+  /** Render a fresh frame and read it back before the browser clears the drawing buffer. */
+  capture(type = 'image/png'): string {
+    this.pipeline.render(0, 16, performance.now());
+    return this.canvas.toDataURL(type);
   }
 
   perfInfo() {

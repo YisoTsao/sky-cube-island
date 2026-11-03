@@ -1,7 +1,7 @@
 import type { EnemyKind, GameEvent, GameState, LevelDef } from '../domain/types';
-import { getLevel, isLevelId, type LevelId } from '../levels/registry';
+import { getPlayableLevel, isPlayableId } from '../levels/registry';
 import { validateLevel } from '../levels/level-validator';
-import { recordVictory } from '../persistence/progress';
+import { recordEndless, recordVictory } from '../persistence/progress';
 import { challengeMet, challengesFor } from '../domain/challenges';
 import { GameController, type EventListener } from '../state/game-controller';
 import { useUi } from '../state/store';
@@ -21,7 +21,7 @@ const initialId = params.get('level');
  * `level` / `controller` always see the current ones after `selectLevel()` (only called while the
  * game view is unmounted, i.e. from the title screen).
  */
-export let level: LevelDef = getLevel(initialId && isLevelId(initialId) ? initialId : 'L1-01');
+export let level: LevelDef = getPlayableLevel(initialId && isPlayableId(initialId) ? initialId : 'L1-01');
 export let controller: GameController = createController(level);
 useUi.getState().set({ levelId: level.id, levelName: level.name });
 
@@ -34,9 +34,9 @@ function createController(l: LevelDef): GameController {
 }
 
 /** Switch the active level (title screen only). */
-export function selectLevel(id: LevelId): void {
+export function selectLevel(id: string): void {
   if (level.id === id) return;
-  level = getLevel(id);
+  level = getPlayableLevel(id);
   controller = createController(level);
   useUi.getState().set({ levelId: id, levelName: level.name });
 }
@@ -117,7 +117,15 @@ function onEvents(events: GameEvent[], ctx: Parameters<EventListener>[1]) {
       if (e.to === 'COMBAT') ui.set({ tool: { type: 'none' }, preview: null });
       if (e.to === 'PREPARE') ui.set({ failureText: null });
     }
-    if (e.type === 'VICTORY') {
+    if (e.type === 'WAVE_CLEARED' && level.endless) {
+      // endless runs are scored by waves cleared; keep the record as soon as a wave falls
+      const prevBest = useUi.getState().progress.endless?.[level.endless.baseId] ?? 0;
+      const progress = recordEndless(level.endless.baseId, e.waveIndex + 1, useUi.getState().progress);
+      ui.set({ progress, endlessNewBest: e.waveIndex + 1 > prevBest ? e.waveIndex + 1 : useUi.getState().endlessNewBest });
+    }
+    if (e.type === 'VICTORY' && level.endless) {
+      ui.set({ stars: e.stars, lastWaveStats: controller.waveStats });
+    } else if (e.type === 'VICTORY') {
       const met = challengesFor(level).filter((c) => challengeMet(c, ctx.state)).map((c) => c.id);
       ui.set({ stars: e.stars, lastWaveStats: controller.waveStats, progress: recordVictory(level.id, e.stars, undefined, { coreHp: ctx.state.coreHp, challenges: met }) });
     }

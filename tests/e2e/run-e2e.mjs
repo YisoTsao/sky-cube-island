@@ -39,6 +39,17 @@ try {
   const towers = await page.evaluate(() => window.__sky.controller.state.towers.length);
   if (towers !== 1) fail(`undo expected 1 tower, got ${towers}`);
 
+  // photo mode (GDD §11.4 T1): hides the HUD, frees the camera, restores everything on exit
+  await page.keyboard.press('p');
+  await wait(300);
+  const photo = await page.evaluate(() => ({ on: !!window.__sky.useUi.getState().photo, panel: !!document.querySelector('.photo-dock'), toolbar: !!document.querySelector('.hud-toolbar'), shot: window.__sky.scene.capture().length }));
+  if (!photo.on || !photo.panel || photo.toolbar) fail(`photo mode did not open cleanly: ${JSON.stringify(photo)}`);
+  if (photo.shot < 10000) fail('photo capture returned an empty image');
+  await page.keyboard.press('Escape');
+  await wait(300);
+  const photoOff = await page.evaluate(() => ({ on: !!window.__sky.useUi.getState().photo, toolbar: !!document.querySelector('.hud-toolbar') }));
+  if (photoOff.on || !photoOff.toolbar) fail(`photo mode did not close: ${JSON.stringify(photoOff)}`);
+
   // recorded CC0 music + SFX load after the first click and replace the synth fallback
   await page.waitForFunction(() => window.__sky.audio.usingRecordedMusic, null, { timeout: 20000 })
     .catch(() => fail('recorded music did not load'));

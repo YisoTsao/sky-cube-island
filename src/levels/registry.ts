@@ -3,6 +3,7 @@ import { generateL1_01 } from './l1-01.generator';
 import { generateL1_02 } from './l1-02.generator';
 import { generateL1_03 } from './l1-03.generator';
 import { generateL1_04 } from './l1-04.generator';
+import { baseIdOf, isEndlessId, makeEndlessLevel } from './endless';
 
 /** Campaign order. A level unlocks once the previous one has been cleared. */
 export const LEVEL_IDS = ['L1-01', 'L1-02', 'L1-03', 'L1-04'] as const;
@@ -25,6 +26,18 @@ export function getLevel(id: LevelId): LevelDef {
   let l = cache.get(id);
   if (!l) { l = GENERATORS[id](); cache.set(id, l); }
   return l;
+}
+
+/** A campaign level or its endless variant (`L1-02-E`). */
+export function isPlayableId(id: string): boolean {
+  return isLevelId(id) || (isEndlessId(id) && isLevelId(baseIdOf(id)));
+}
+
+export function getPlayableLevel(id: string): LevelDef {
+  if (isLevelId(id)) return getLevel(id);
+  const base = baseIdOf(id);
+  if (isEndlessId(id) && isLevelId(base)) return makeEndlessLevel(getLevel(base));
+  throw new Error(`unknown level ${id}`);
 }
 
 export function nextLevelId(id: string): LevelId | null {

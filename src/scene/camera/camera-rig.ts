@@ -14,6 +14,8 @@ export class CameraRig {
   private yawTo = 0;
   private yawT = 1;
   pitch = MathUtils.degToRad(38);
+  /** Photo mode lets the free zoom go further in and out. */
+  photoZoom = false;
   /**
    * Snapped zoom levels, widest first. Index 0 is a strategic overview that fits the whole island;
    * the last two are close-ups where individual towers and enemies fill a good part of the screen.
@@ -51,13 +53,37 @@ export class CameraRig {
     this.yawT = 0;
   }
 
+  /** Eased turn by an arbitrary angle (photo mode uses 15° steps). */
+  rotateBy(rad: number) {
+    const base = this.yawT < 1 ? this.yawTo : this.yaw;
+    this.yawFrom = this.yaw;
+    this.yawTo = base + rad;
+    this.yawT = 0;
+  }
+  /** Immediate yaw change (photo-mode drag orbit). */
+  turn(rad: number) {
+    this.yaw = (this.yawT < 1 ? this.yawTo : this.yaw) + rad;
+    this.yawTo = this.yaw;
+    this.yawT = 1;
+  }
+  static readonly DEFAULT_PITCH = MathUtils.degToRad(38);
+  /** Photo mode can tilt the view between a low grazing angle and near top-down. */
+  setPitch(rad: number) { this.pitch = MathUtils.clamp(rad, MathUtils.degToRad(18), MathUtils.degToRad(80)); }
+  /** Snapshot / restore of the view (photo mode puts the tactical camera back on exit). */
+  getView() { return { yaw: this.yawT < 1 ? this.yawTo : this.yaw, pitch: this.pitch, zoomIndex: this.zoomIndex, zoom: this.zoomTarget, target: this.target.clone() }; }
+  setView(v: ReturnType<CameraRig['getView']>) {
+    this.yaw = this.yawTo = v.yaw; this.yawT = 1;
+    this.pitch = v.pitch; this.zoomIndex = v.zoomIndex; this.zoomTarget = v.zoom;
+    this.target.copy(v.target);
+  }
+
   zoomStep(dir: 1 | -1) {
     this.zoomIndex = MathUtils.clamp(this.zoomIndex + dir, 0, this.zoomLevels.length - 1);
     this.zoomTarget = Math.min(this.zoomLevels[this.zoomIndex]!, this.maxZoom);
   }
   /** Smooth wheel zoom between snapped levels. */
   zoomBy(delta: number) {
-    this.zoomTarget = MathUtils.clamp(this.zoomTarget * Math.exp(-delta * 0.0015), CameraRig.MIN_ZOOM, this.maxZoom);
+    this.zoomTarget = MathUtils.clamp(this.zoomTarget * Math.exp(-delta * 0.0015), this.photoZoom ? 0.4 : CameraRig.MIN_ZOOM, this.photoZoom ? this.maxZoom * 1.8 : this.maxZoom);
     // snap index to nearest
     let best = 0;
     this.zoomLevels.forEach((z, i) => { if (Math.abs(z - this.zoomTarget) < Math.abs(this.zoomLevels[best]! - this.zoomTarget)) best = i; });
