@@ -14,6 +14,18 @@ import { launchLevel } from './launch';
 import { CHAPTERS } from '../levels/campaign';
 import { dailyIdFor, makeDailyLevel, todayString } from '../levels/daily';
 import { WEATHER_NAME } from './Hud';
+import { Editor } from './Editor';
+import { decodeCustom, registerCustom, type CustomSpec } from '../levels/custom';
+
+/** A level shared as `?custom=…`: decoded, validated and registered once at startup. */
+const shared: { spec: CustomSpec; id: string; name: string } | { error: string } | null = (() => {
+  const code = new URLSearchParams(location.search).get('custom');
+  if (!code) return null;
+  const d = decodeCustom(code);
+  if (!d.ok) return { error: d.error };
+  const r = registerCustom(d.spec);
+  return r.ok ? { spec: d.spec, id: r.id, name: d.spec.name } : { error: '分享的關卡無法通過檢查' };
+})();
 
 applyInitialSettings();
 const params = new URLSearchParams(location.search);
@@ -80,12 +92,15 @@ function Title() {
     if (isLevelId(current) && open.includes(current) && !progress.best[current]) return current;
     return open[open.length - 1] ?? 'L1-01';
   });
-  const [chapter, setChapter] = useState(() => Math.max(0, CHAPTERS.findIndex((c) => c.levelIds.includes(picked))));
+  const [chapter, setChapter] = useState(() => (shared && 'id' in shared ? CHAPTERS.length + 1 : Math.max(0, CHAPTERS.findIndex((c) => c.levelIds.includes(picked)))));
   const [endless, setEndless] = useState(false);
   const isDaily = chapter === CHAPTERS.length;
+  const sharedOk = shared && 'id' in shared ? shared : null;
+  const isShared = chapter === CHAPTERS.length + 1 && !!sharedOk;
   const [today] = useState(() => todayString());
-  const endlessOpen = !isDaily && isEndlessUnlocked(picked, progress);
-  const playId = isDaily ? dailyIdFor(today) : endless && endlessOpen ? endlessIdOf(picked) : picked;
+  const endlessOpen = !isDaily && !isShared && isEndlessUnlocked(picked, progress);
+  const playId = isShared ? sharedOk!.id : isDaily ? dailyIdFor(today) : endless && endlessOpen ? endlessIdOf(picked) : picked;
+  useEffect(() => { if (shared && 'error' in shared) useUi.getState().toast(`✕ ${shared.error}`, 'error'); }, []);
   useEffect(() => {
     useUi.getState().set({ hasSave: false });
     void readSave(playId).then((v) => useUi.getState().set({ hasSave: !!v }));
@@ -127,13 +142,27 @@ function Title() {
           <button role="tab" aria-selected={isDaily} className={`chapter-tab daily ${isDaily ? 'on' : ''}`} title="每天一座新島，所有玩家同一張地圖" onClick={() => { audio.play('click'); setChapter(CHAPTERS.length); }}>
             ☀ 每日挑戰
           </button>
+          {sharedOk && (
+            <button role="tab" aria-selected={isShared} className={`chapter-tab daily ${isShared ? 'on' : ''}`} onClick={() => { audio.play('click'); setChapter(CHAPTERS.length + 1); }}>
+              🔗 分享關卡
+            </button>
+          )}
         </div>
         <div className="level-select" role="group" aria-label="選擇關卡">
-          {isDaily
+          {isShared
+            ? (
+              <div className={`level-card daily selected theme-${sharedOk!.spec.theme}`}>
+                <span className="level-card-id">朋友分享的自訂關卡</span>
+                <span className="level-card-name">{sharedOk!.name}</span>
+                <span className="level-card-meta">{sharedOk!.spec.plan.waves} 波 · {sharedOk!.spec.layout.sides.length} 座外島 · 起始 {sharedOk!.spec.initialGold} 金</span>
+                <button className="btn ghost" onClick={() => { audio.play('click'); useUi.getState().set({ screen: 'editor', editorSpec: sharedOk!.spec }); }}>在編輯器開啟</button>
+              </div>
+            )
+            : isDaily
             ? <DailyCard date={today} />
             : (CHAPTERS[chapter]?.levelIds ?? LEVEL_IDS).map((id) => <LevelCard key={id} id={id as LevelId} selected={picked === id} onPick={() => { audio.play('click'); setPicked(id as LevelId); }} />)}
         </div>
-        <div className="mode-switch" role="group" aria-label="遊戲模式" hidden={isDaily}>
+        <div className="mode-switch" role="group" aria-label="遊戲模式" hidden={isDaily || isShared}>
           <button className={`mode-btn ${!endless || !endlessOpen ? 'on' : ''}`} aria-pressed={!endless || !endlessOpen} onClick={() => { audio.play('click'); setEndless(false); }}>戰役</button>
           <button
             className={`mode-btn ${endless && endlessOpen ? 'on' : ''}`} aria-pressed={endless && endlessOpen} disabled={!endlessOpen}
@@ -154,6 +183,7 @@ function Title() {
           <div className="title-row">
             <button className="btn ghost" onClick={() => useUi.getState().set({ settingsOpen: true })}>設定</button>
             <button className="btn ghost" onClick={() => useUi.getState().set({ helpOpen: true })}>操作說明</button>
+            <button className="btn ghost" onClick={() => { audio.play('click'); useUi.getState().set({ screen: 'editor', editorSpec: null }); }}>關卡編輯器</button>
           </div>
         </div>
       </div>
@@ -161,6 +191,11 @@ function Title() {
       <HelpPanel />
     </div>
   );
+}
+
+function EditorScreen() {
+  const spec = useUi((s) => s.editorSpec);
+  return <Editor initial={spec ?? undefined} />;
 }
 
 export function App() {
@@ -175,6 +210,7 @@ export function App() {
     }
   }, []);
   if (screen === 'title') return <Title />;
+  if (screen === 'editor') return <EditorScreen />;
   return (
     <Fragment key={levelId}>
       <GameView />

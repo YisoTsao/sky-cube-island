@@ -7,6 +7,7 @@ import { baseIdOf, isEndlessId, makeEndlessLevel } from './endless';
 import { GENERATED_SPECS } from './campaign';
 import { generateLevel } from './procgen';
 import { dateOfDaily, isDailyId, makeDailyLevel } from './daily';
+import { getCustomLevel, isCustomId } from './custom';
 
 /** Campaign order (3 chapters × 5 islands). A level unlocks once the previous one has been cleared. */
 export const LEVEL_IDS = [
@@ -47,12 +48,14 @@ export function getLevel(id: LevelId): LevelDef {
 
 /** A campaign level or its endless variant (`L1-02-E`). */
 export function isPlayableId(id: string): boolean {
-  return isLevelId(id) || (isEndlessId(id) && isLevelId(baseIdOf(id))) || isDailyId(id);
+  return isLevelId(id) || (isEndlessId(id) && isLevelId(baseIdOf(id))) || isDailyId(id) || (isCustomId(id) && !!getCustomLevel(id));
 }
 
 export function getPlayableLevel(id: string): LevelDef {
   if (isLevelId(id)) return getLevel(id);
   if (isDailyId(id)) return makeDailyLevel(dateOfDaily(id));
+  const custom = isCustomId(id) ? getCustomLevel(id) : null;
+  if (custom) return custom;
   const base = baseIdOf(id);
   if (isEndlessId(id) && isLevelId(base)) return makeEndlessLevel(getLevel(base));
   throw new Error(`unknown level ${id}`);
