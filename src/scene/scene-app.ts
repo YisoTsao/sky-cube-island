@@ -417,6 +417,31 @@ export class SceneApp {
   }
   setSelection(s: { type: 'tower' | 'wall' | 'cell'; id: string } | null) { this.selection = s; }
   setHover(cellId: CellId | null) { this.hoverCell = cellId; }
+  /** Move tool: highlight every cell the picked-up tower may be put down on (null = off). */
+  private moveTargets: ReadonlySet<CellId> | null = null;
+  private movingTowerId: string | null = null;
+  setMoveTargets(cells: ReadonlySet<CellId> | null, towerId: string | null = null) { this.moveTargets = cells; this.movingTowerId = cells ? towerId : null; }
+  /** The picked-up tower hovers and glides after the candidate spot; snaps home when the move ends. */
+  private liftedTowerId: string | null = null;
+  private updateLiftedTower(dt: number) {
+    const id = this.movingTowerId;
+    if (this.liftedTowerId && this.liftedTowerId !== id) {
+      const t = this.feed.state.towers.find((x) => x.id === this.liftedTowerId);
+      const v = this.towers.get(this.liftedTowerId);
+      if (t && v) v.group.position.copy(this.towerCenter(t.anchorCellId));
+      this.liftedTowerId = null;
+    }
+    if (!id) return;
+    const t = this.feed.state.towers.find((x) => x.id === id);
+    const v = this.towers.get(id);
+    if (!t || !v) return;
+    this.liftedTowerId = id;
+    const p = this.preview;
+    const anchor = p?.tool.type === 'move' && p.ok && p.towerPreview ? p.towerPreview.anchorCellId : t.anchorCellId;
+    const target = this.towerCenter(anchor).add(new Vector3(0, 0.35, 0));
+    const k = this.opts.reducedMotion ? 1 : 1 - Math.exp(-dt * 16);
+    v.group.position.lerp(target, k);
+  }
   setShowAllRanges(v: boolean) { this.showAll = v; }
   /** Editable-rune emphasis: 0 hidden (combat), ~0.3 idle, 1 while a terrain tool is held. */
   runeTarget = 0.3;
@@ -460,6 +485,8 @@ export class SceneApp {
   private towerCenter(anchorCellId: CellId): Vector3 {
     return this.cellWorld(anchorCellId).add(new Vector3(0.5, 0, 0.5));
   }
+  /** Anchor each tower view was last placed at, so a move (or its undo) relocates the view. */
+  private towerAnchors = new Map<string, CellId>();
   syncEntities(animate: boolean) {
     const s = this.feed.state;
     const seen = new Set<string>();
@@ -471,8 +498,13 @@ export class SceneApp {
         this.scene.add(v.group);
         this.towers.set(t.id, v);
         if (animate) this.vfx.dust(v.group.position, 1.4, 22);
-      } else if (v.level !== t.level || v.branch !== t.branch) v.setLevel(t.level, animate, t.branch);
+      } else {
+        if (v.level !== t.level || v.branch !== t.branch) v.setLevel(t.level, animate, t.branch);
+        if (this.towerAnchors.get(t.id) !== t.anchorCellId) v.group.position.copy(this.towerCenter(t.anchorCellId));
+      }
+      this.towerAnchors.set(t.id, t.anchorCellId);
     }
+    for (const id of this.towerAnchors.keys()) if (!seen.has(id)) this.towerAnchors.delete(id);
     for (const [id, v] of this.towers) if (!seen.has(id)) { this.scene.remove(v.group); this.towers.delete(id); }
     const wseen = new Set<string>();
     for (const w of s.walls) {
@@ -591,6 +623,14 @@ export class SceneApp {
             this.vfx.sparks(p, 'gold', 20, { speed: 2 });
             this.hooks.onCoins?.(this.screenOf(p), 0);
           }
+          needSync = true;
+          break;
+        }
+        case 'TOWER_MOVED': {
+          const from = this.towerCenter(e.fromAnchorCellId), to = this.towerCenter(e.anchorCellId);
+          this.vfx.dust(from, 1.2, 16);
+          this.vfx.dust(to, 1.4, 22);
+          this.vfx.ring(to, 1.6, 'gold', 0.5);
           needSync = true;
           break;
         }
@@ -891,6 +931,7 @@ export class SceneApp {
     const prepare = phase === 'PREPARE';
     ov.setRoutesVisible(phase !== 'MENU', prepare ? 0.95 : 0.6);
     ov.showGhosts = prepare;
+    this.updateLiftedTower(dt);
     ov.beginCells();
     // illegal flash (red blink + shake)
     if (this.illegalFlash.t > 0) {
@@ -900,7 +941,21 @@ export class SceneApp {
       if (on) for (const c of this.illegalFlash.cells) ov.pushCell(c, TACTICAL.illegal, 0.75, 3, 0.05, 1 + shake);
     }
     const p = this.preview;
-    if (p && prepare) {
+    const moving = !!this.moveTargets && (prepare || phase === 'COMBAT');
+    if (moving) {
+      // where the tower may go (soft pulsing green), then the candidate footprint and its range on top
+      const pulse = 1; // kind 4 pulses in the shader
+      const cand = p?.tool.type === 'move' ? p : null;
+      for (const c of this.moveTargets!) if (!cand?.cellIds.includes(c)) ov.pushCell(c, TACTICAL.legal, pulse, 4, 0.03);
+      if (this.movingTowerId) {
+        const home = this.feed.state.towers.find((x) => x.id === this.movingTowerId);
+        if (home) for (const c of home.footprintCellIds) if (!cand?.cellIds.includes(c)) ov.pushCell(c, TACTICAL.select, 0.6, 2, 0.04);
+      }
+      if (cand) {
+        if (cand.range) ov.pushRange(cand.range, true);
+        for (const c of cand.cellIds) ov.pushCell(c, cand.ok ? TACTICAL.legal : TACTICAL.illegal, 0.75, 3, 0.05);
+      }
+    } else if (p && prepare) {
       if (p.range) ov.pushRange(p.range, true);
       const color = p.ok ? TACTICAL.legal : TACTICAL.illegal;
       for (const c of p.cellIds) ov.pushCell(c, color, 0.6, 3, 0.05);
@@ -917,7 +972,7 @@ export class SceneApp {
     // selection range
     const sel = this.selection;
     const ranges: RangeCell[][] = [];
-    if (sel?.type === 'tower') ranges.push(this.feed.rangeForTower(sel.id));
+    if (sel?.type === 'tower' && !moving) ranges.push(this.feed.rangeForTower(sel.id));
     if (this.showAll) for (const t of s.towers) if (sel?.id !== t.id) ranges.push(this.feed.rangeForTower(t.id));
     ranges.forEach((r, i) => ov.pushRange(r, i === 0 && sel?.type === 'tower'));
     if (sel?.type === 'tower') {

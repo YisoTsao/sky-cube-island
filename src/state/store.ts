@@ -34,6 +34,8 @@ export interface UiState {
   waveCount: number;
   tool: Tool;
   selection: Selection;
+  /** The selected tower's full info panel is open (otherwise it shows the compact action menu). */
+  towerInfo: boolean;
   hover: HoverInfo | null;
   preview: PreviewInfo | null;
   toasts: Toast[];
@@ -84,6 +86,7 @@ export const useUi = create<UiState>((set, get) => ({
   waveCount: 5,
   tool: { type: 'none' },
   selection: null,
+  towerInfo: false,
   hover: null,
   preview: null,
   toasts: [],

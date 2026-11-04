@@ -12,6 +12,7 @@ import { saveSettings, type SettingsV1 } from '../settings/settings';
 import { audio } from '../audio/audio';
 import { issue, setTool, startWave } from './GameView';
 import { launchLevel } from './launch';
+import { TowerMenu, sellTower, startTowerMove } from './TowerMenu';
 import { PhotoPanel, enterPhoto } from './PhotoMode';
 import { challengeMet, challengesFor } from '../domain/challenges';
 import { getLevel, nextLevelId } from '../levels/registry';
@@ -81,7 +82,7 @@ function cancelTool() {
 }
 
 function clearSelection() {
-  useUi.getState().set({ selection: null });
+  useUi.getState().set({ selection: null, towerInfo: false });
   runtime.scene?.setSelection(null);
 }
 
@@ -274,8 +275,12 @@ function Toolbar() {
 function SelectionPanel() {
   const sel = useUi((s) => s.selection);
   const phase = useUi((s) => s.phase);
+  const towerInfo = useUi((s) => s.towerInfo);
+  const moving = useUi((s) => s.tool.type === 'move');
   useUi((s) => s.gold); // re-render on gold change for affordability
   if (!sel) return null;
+  // a tower opens the compact action menu first; the full panel is its 資訊 button
+  if (sel.type === 'tower' && (!towerInfo || moving)) return null;
   const prep = phase === 'PREPARE';
   const towersOpen = prep || phase === 'COMBAT';
   if (sel.type === 'tower') {
@@ -349,7 +354,8 @@ function SelectionPanel() {
                 升級 <span className="btn-cost"><CoinIcon size={14} />{upCost}</span>
               </button>
             ) : <button className="btn" disabled>已滿級</button>}
-            <button className="btn danger" onClick={() => { issue({ type: 'SELL_TOWER', towerId: t.id }); clearSelection(); }}>
+            <button className="btn" onClick={() => startTowerMove(t.id)} title="移動（M）">移動</button>
+            <button className="btn danger" onClick={() => sellTower(t.id)}>
               出售 <span className="btn-cost">+{sellRefund(t.investedGold)}</span>
             </button>
           </div>
@@ -424,14 +430,17 @@ function ToolHint() {
       </div>
     );
   }
-  const label = tool.type === 'build' ? TOWER_DEFS[tool.kind].name : tool.type === 'raise' ? '抬升地形' : tool.type === 'lower' ? '降低地形' : tool.type === 'trap' ? '放置陷阱' : tool.type === 'bridge' ? '拆橋 / 修橋' : '放置木牆';
+  const movingTower = tool.type === 'move' ? controller.state.towers.find((t) => t.id === tool.towerId) : undefined;
+  const label = tool.type === 'build' ? TOWER_DEFS[tool.kind].name : movingTower ? `移動${TOWER_DEFS[movingTower.kind].name}` : tool.type === 'raise' ? '抬升地形' : tool.type === 'lower' ? '降低地形' : tool.type === 'trap' ? '放置陷阱' : tool.type === 'bridge' ? '拆橋 / 修橋' : '放置木牆';
   return (
     <div className={`hover-chip tool ${preview ? (preview.ok ? 'ok' : 'bad') : ''}`}>
       <b>{label}</b>
-      {preview ? (preview.ok ? <> · 花費 {preview.cost}{hover ? ` · 高度 ${hover.elevation}` : ''}</> : <> · {preview.message}</>) : <> · {touch ? '點選地塊預覽' : '選擇地塊'}</>}
+      {preview
+        ? (preview.ok ? <> · {movingTower ? '免費' : `花費 ${preview.cost}`}{hover ? ` · 高度 ${hover.elevation}` : ''}</> : <> · {preview.message}</>)
+        : <> · {movingTower ? '選擇綠色區域放下' : touch ? '點選地塊預覽' : '選擇地塊'}</>}
       {touch
         ? <>
-            {preview?.ok && <span className="chip-confirm">再點一次同一格確認</span>}
+            {preview?.ok && <span className="chip-confirm">{movingTower ? '放開手指或再點一次確認' : '再點一次同一格確認'}</span>}
             <button className="chip-cancel" onClick={cancelTool} aria-label="取消">取消</button>
           </>
         : <span className="chip-esc">右鍵/Esc 取消</span>}
@@ -804,6 +813,7 @@ export function Hud() {
       <TopRight />
       <Tutorial />
       <ToolHint />
+      <TowerMenu />
       <SelectionPanel />
       <StartWave />
       <Toolbar />

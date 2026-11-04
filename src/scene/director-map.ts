@@ -30,6 +30,7 @@ export const DIRECTOR_REACTIONS: Record<GameEventType, string> = {
   TOWER_BUILT: 'layer assembly animation + dust ring',
   TOWER_UPGRADED: 'swap parts with pop + sparkle',
   TOWER_SOLD: 'voxel shatter + coins fly to HUD',
+  TOWER_MOVED: 'dust puff at the old and new spot, tower hops over',
   ROUTES_CHANGED: 'route ribbons rebuilt with light sweep',
   UNDO_APPLIED: 'rewind: resync terrain/entities with short tween',
   VICTORY: 'camera orbit + stars (HUD)',

@@ -8,7 +8,9 @@ export type Tool =
   | { type: 'none' }
   | { type: 'build'; kind: TowerKind }
   | { type: 'raise' } | { type: 'lower' } | { type: 'wall' }
-  | { type: 'trap' } | { type: 'bridge' };
+  | { type: 'trap' } | { type: 'bridge' }
+  /** Relocating an existing tower: pick a new anchor cell. */
+  | { type: 'move'; towerId: string };
 
 export interface PreviewInfo {
   tool: Tool;

@@ -36,6 +36,7 @@ export const SFX_FOR_EVENT: Record<GameEventType, SfxId | 'none' | 'dynamic'> = 
   TOWER_BUILT: 'build',
   TOWER_UPGRADED: 'upgrade',
   TOWER_SOLD: 'sell',
+  TOWER_MOVED: 'build',
   ROUTES_CHANGED: 'none',
   UNDO_APPLIED: 'undo',
   VICTORY: 'victory',
