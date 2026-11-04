@@ -648,8 +648,18 @@ function ChallengeList({ final = false }: { final?: boolean }) {
 function PauseMenu() {
   const open = useUi((s) => s.pauseOpen);
   const phase = useUi((s) => s.phase);
+  const [confirmRestart, setConfirmRestart] = useState(false);
+  useEffect(() => { if (!open) setConfirmRestart(false); }, [open]);
   if (!open) return null;
   const close = () => { useUi.getState().set({ pauseOpen: false }); controller.flags.paused = false; syncStore(); };
+  // Replay this level from wave 1: fresh state, so the core is back to full HP.
+  const restartLevel = () => {
+    controller.newGame();
+    clearSelection();
+    useUi.getState().set({ failureText: null, endlessNewBest: 0 });
+    audio.play('click');
+    close();
+  };
   return (
     <div className="modal-wrap dark" onClick={close}>
       <div className="panel modal pause" onClick={(e) => e.stopPropagation()}>
@@ -659,6 +669,17 @@ function PauseMenu() {
           <button className="btn" onClick={() => useUi.getState().set({ settingsOpen: true })}>設定</button>
           <button className="btn" onClick={() => useUi.getState().set({ helpOpen: true })}>操作說明</button>
           <button className="btn" onClick={() => { useUi.getState().set({ pauseOpen: false }); enterPhoto(); }}>拍照模式</button>
+          {confirmRestart ? (
+            <div className="restart-confirm">
+              <div className="restart-confirm-text">從第 1 波重新開始？目前進度會清除，守護之心回滿血。</div>
+              <div className="modal-actions">
+                <button className="btn danger" onClick={restartLevel} autoFocus>確定重玩</button>
+                <button className="btn ghost" onClick={() => setConfirmRestart(false)}>取消</button>
+              </div>
+            </div>
+          ) : (
+            <button className="btn" onClick={() => setConfirmRestart(true)}>重玩此關</button>
+          )}
           <button className="btn ghost" onClick={() => { close(); useUi.getState().set({ screen: 'title' }); }}>回到標題（自動存檔）</button>
         </div>
         <ChallengeList />
