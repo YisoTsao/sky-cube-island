@@ -8,3 +8,5 @@ tests/e2e/__out__
 tsconfig.tsbuildinfo
 tests/e2e/last-run.png
 tests/e2e/mobile-*.png
+tests/e2e/tower-menu.png
+tests/e2e/tower-move-preview.png

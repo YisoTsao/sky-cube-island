@@ -142,3 +142,10 @@ export const RotateIcon = ({ dir }: { dir: 1 | -1 }) => (<svg width="20" height=
 export const StarIcon = ({ filled, size = 46 }: { filled: boolean; size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden><path d="M12 2.5 14.9 8.6 21.5 9.4 16.6 13.9 17.9 20.5 12 17.2 6.1 20.5 7.4 13.9 2.5 9.4 9.1 8.6Z" fill={filled ? '#ffd34a' : '#3a3f4b'} stroke={filled ? '#c9932f' : '#22252d'} strokeWidth="1.5" strokeLinejoin="round" /></svg>
 );
+
+/* tower action menu (white glyphs on coloured discs) */
+const glyph = { fill: 'none', stroke: 'currentColor', strokeWidth: 2.6, strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
+export const UpgradeIcon = () => (<svg width="24" height="24" viewBox="0 0 24 24" aria-hidden><path d="M12 20V5M6 11l6-6 6 6" {...glyph} /></svg>);
+export const SellIcon = () => (<svg width="24" height="24" viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="8" {...glyph} /><path d="M14.5 9.2c-.6-.8-1.5-1.2-2.5-1.2-1.4 0-2.5.8-2.5 2s1.1 1.6 2.5 2 2.5.8 2.5 2-1.1 2-2.5 2c-1 0-1.9-.4-2.5-1.2M12 6.5V8M12 16v1.5" {...glyph} strokeWidth={2} /></svg>);
+export const MoveIcon = () => (<svg width="24" height="24" viewBox="0 0 24 24" aria-hidden><path d="M12 3v18M3 12h18M12 3 9.5 5.5M12 3l2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M3 12l2.5-2.5M3 12l2.5 2.5M21 12l-2.5-2.5M21 12l-2.5 2.5" {...glyph} strokeWidth={2.3} /></svg>);
+export const InfoIcon = () => (<svg width="24" height="24" viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="9" {...glyph} strokeWidth={2.2} /><path d="M12 11v6" {...glyph} /><circle cx="12" cy="7.5" r="1.5" fill="currentColor" /></svg>);

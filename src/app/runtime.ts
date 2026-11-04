@@ -84,7 +84,7 @@ function playAudio(events: GameEvent[], state: GameState) {
       case 'TERRAIN_CHANGED': id = e.to > e.from ? 'raise' : 'lower'; break;
       case 'WALL_PLACED': id = 'wallPlace'; break;
       case 'WALL_REMOVED': id = 'wallRemove'; break;
-      case 'TOWER_BUILT': id = 'build'; break;
+      case 'TOWER_BUILT': case 'TOWER_MOVED': id = 'build'; break;
       case 'TOWER_UPGRADED': id = 'upgrade'; break;
       case 'TOWER_SOLD': id = 'sell'; break;
       case 'UNDO_APPLIED': id = 'undo'; break;

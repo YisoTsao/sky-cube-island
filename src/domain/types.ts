@@ -293,6 +293,8 @@ export type GameCommand =
   | { type: 'BUILD_TOWER'; kind: TowerKind; anchorCellId: CellId }
   | { type: 'UPGRADE_TOWER'; towerId: string; /** required when upgrading Lv3 → Lv4 */ branch?: TowerBranch }
   | { type: 'SELL_TOWER'; towerId: string }
+  /** Relocate a tower (keeps level, branch, targeting and invested gold); free. */
+  | { type: 'MOVE_TOWER'; towerId: string; anchorCellId: CellId }
   | { type: 'SET_TARGETING'; towerId: string; targeting: TargetingMode }
   | { type: 'PLACE_TRAP'; cellId: CellId }
   | { type: 'REMOVE_TRAP'; trapId: string }
@@ -307,7 +309,7 @@ export type RejectionCode =
   | 'PROTECTED_CONNECTOR' | 'INSUFFICIENT_GOLD'
   | 'NO_ROUTE_FROM_PORTAL' | 'ROUTE_TOO_LONG'
   | 'NOT_FOUND' | 'INVALID_LEVEL_DATA'
-  | 'NOTHING_TO_UNDO' | 'MAX_LEVEL' | 'BRANCH_REQUIRED' | 'ON_ACTIVE_ROUTE' | 'NOT_A_TRAP_CELL';
+  | 'NOTHING_TO_UNDO' | 'MAX_LEVEL' | 'BRANCH_REQUIRED' | 'ON_ACTIVE_ROUTE' | 'NOT_A_TRAP_CELL' | 'SAME_POSITION';
 
 export type CommandResult =
   | { ok: true; state: GameState; events: GameEvent[]; cost: number }
@@ -347,6 +349,7 @@ export type GameEvent =
   | { type: 'WALL_PLACED' | 'WALL_REMOVED'; tick: number; wallId: string; cellId: CellId }
   | { type: 'TOWER_BUILT' | 'TOWER_UPGRADED' | 'TOWER_SOLD'; tick: number; towerId: string;
       kind: TowerKind; level: TowerLevel; anchorCellId: CellId; branch?: TowerBranch }
+  | { type: 'TOWER_MOVED'; tick: number; towerId: string; kind: TowerKind; fromAnchorCellId: CellId; anchorCellId: CellId }
   | { type: 'ROUTES_CHANGED'; tick: number; portalIds: string[] }
   | { type: 'TRAP_PLACED' | 'TRAP_REMOVED'; tick: number; trapId: string; cellId: CellId }
   | { type: 'TRAP_TRIGGERED'; tick: number; trapId: string; cellId: CellId; hitIds: string[] }
@@ -363,7 +366,7 @@ export const ALL_EVENT_TYPES: readonly GameEventType[] = [
   'TOWER_BLOCKED', 'ENEMY_DAMAGED', 'ENEMY_SLOWED', 'ENEMY_HEALED', 'ENEMY_REBORN', 'CANNON_EXPLODED',
   'LIGHTNING_CHAINED', 'WIND_GUST', 'ENEMY_KNOCKED_BACK', 'TOWER_TARGETING_CHANGED', 'ENEMY_KILLED',
   'ENEMY_REACHED_CORE', 'CORE_DAMAGED', 'GOLD_CHANGED', 'TERRAIN_CHANGED', 'WALL_PLACED',
-  'WALL_REMOVED', 'TOWER_BUILT', 'TOWER_UPGRADED', 'TOWER_SOLD', 'ROUTES_CHANGED',
+  'WALL_REMOVED', 'TOWER_BUILT', 'TOWER_UPGRADED', 'TOWER_SOLD', 'TOWER_MOVED', 'ROUTES_CHANGED',
   'UNDO_APPLIED', 'VICTORY', 'DEFEAT',
   'TRAP_PLACED', 'TRAP_REMOVED', 'TRAP_TRIGGERED', 'WALL_DESTROYED', 'BRIDGE_COLLAPSED', 'BRIDGE_REPAIRED',
 ] as const;

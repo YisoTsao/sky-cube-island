@@ -39,6 +39,51 @@ try {
   const towers = await page.evaluate(() => window.__sky.controller.state.towers.length);
   if (towers !== 1) fail(`undo expected 1 tower, got ${towers}`);
 
+  // click a tower → compact menu; 移動 lights the legal spots; clicking one moves the tower there
+  {
+    const at = await page.evaluate(() => {
+      const { controller: c, scene } = window.__sky;
+      const t = c.state.towers[0];
+      const w = scene.cellWorld(t.anchorCellId);
+      w.x += 0.5; w.z += 0.5; w.y += 0.6;
+      return scene.worldToScreen(w);
+    });
+    await page.mouse.move(at.x, at.y);
+    await page.mouse.click(at.x, at.y);
+    await wait(500);
+    const selected = await page.evaluate(([x, y]) => ({ sel: window.__sky.useUi.getState().selection, el: document.elementFromPoint(x, y)?.className }), [at.x, at.y]);
+    if (selected.sel?.type !== 'tower') fail(`tower click did not select it: ${JSON.stringify(selected)} at ${JSON.stringify(at)}`);
+    const labels = await page.locator('.tower-menu-btn .tmb-label').allTextContents();
+    if (labels.join(',') !== '升級,出售,移動,資訊') fail(`tower menu: ${labels.join(',')}`);
+    if (await page.locator('.selection-panel').count()) fail('full tower panel opened on click');
+    await page.screenshot({ path: 'tests/e2e/tower-menu.png' });
+    await page.locator('.tower-menu-btn', { hasText: '移動' }).click();
+    await wait(200);
+    const target = await page.evaluate(() => {
+      const { controller: c, scene, useUi } = window.__sky;
+      const tool = useUi.getState().tool;
+      if (tool.type !== 'move') return null;
+      const t = c.state.towers[0];
+      const head = scene.towerScreen(t.id);
+      const hit = [...c.moveTargets(t.id)].map((id) => ({ id, p: scene.worldToScreen(scene.cellWorld(id)) }))
+        .find(({ id, p }) => c.preview(tool, id)?.ok && p.x > 60 && p.x < innerWidth - 60 && p.y > 120 && p.y < innerHeight - 220
+          && Math.hypot(p.x - head.x, p.y - head.y) > 140 && scene.pick(p.x, p.y).cellId === id && !scene.pick(p.x, p.y).towerId);
+      return hit ? { id: hit.id, x: hit.p.x, y: hit.p.y } : null;
+    });
+    if (!target) fail('move tool not active or no target on screen');
+    else {
+      await page.mouse.move(target.x, target.y);
+      await wait(300);
+      await page.screenshot({ path: 'tests/e2e/tower-move-preview.png' });
+      await page.mouse.click(target.x, target.y);
+      await wait(300);
+      const moved = await page.evaluate(() => ({ anchor: window.__sky.controller.state.towers[0].anchorCellId, tool: window.__sky.useUi.getState().tool.type }));
+      if (moved.anchor !== target.id || moved.tool !== 'none') fail(`move did not land: ${JSON.stringify(moved)} vs ${target.id}`);
+    }
+    await page.keyboard.press('Escape');
+    await wait(200);
+  }
+
   // photo mode (GDD §11.4 T1): hides the HUD, frees the camera, restores everything on exit
   await page.keyboard.press('p');
   await wait(300);

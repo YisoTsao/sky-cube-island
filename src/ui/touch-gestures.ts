@@ -81,6 +81,11 @@ export class TouchGestures {
     return out;
   }
 
+  /** True while exactly this one finger has been down the whole gesture without moving (a long-press candidate). */
+  stillSingle(id: number): boolean {
+    return this.pts.size === 1 && this.pts.has(id) && this.maxPointers === 1 && !this.moved;
+  }
+
   /** Returns a tap when a single, short, stationary touch ends. */
   up(id: number, x: number, y: number, t: number): TapResult | null {
     const p = this.pts.get(id);

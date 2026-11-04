@@ -8,7 +8,7 @@ import { autoQuality, isMobileDevice } from '../settings/device';
 import { useUi } from '../state/store';
 import { audio } from '../audio/audio';
 import type { Tool } from '../presentation/feed';
-import { TouchGestures, pinchToWheelDelta } from './touch-gestures';
+import { TAP_SLOP_PX, TouchGestures, pinchToWheelDelta } from './touch-gestures';
 import { edgeScrollVector } from './edge-scroll';
 import { enterPhoto, exitPhoto, photoActive, photoDrag, photoKey } from './PhotoMode';
 
@@ -47,19 +47,24 @@ export function setTool(tool: Tool) {
   }
   const same = ui.tool.type === tool.type && (tool.type !== 'build' || (ui.tool.type === 'build' && ui.tool.kind === tool.kind));
   const next = same ? { type: 'none' as const } : tool;
-  ui.set({ tool: next, preview: null, selection: next.type === 'none' ? ui.selection : null });
+  // moving keeps the picked-up tower selected (its footprint stays outlined while choosing a spot)
+  const keep = next.type === 'none' || next.type === 'move';
+  ui.set({ tool: next, preview: null, selection: keep ? ui.selection : null, towerInfo: false });
   runtime.scene?.setPreview(null);
-  runtime.scene?.setSelection(null);
+  if (!keep) runtime.scene?.setSelection(null);
   audio.play('click');
   const hover = ui.hover?.cellId ?? null;
   if (next.type !== 'none' && hover) refreshPreview(hover);
 }
 
-/** Terrain and walls are PREPARE-only; towers can also be built during COMBAT. */
+/** Terrain and walls are PREPARE-only; towers can also be built (and moved) during COMBAT. */
 export function toolAllowed(phase: string, tool: Tool): boolean {
   if (phase === 'PREPARE') return true;
-  return phase === 'COMBAT' && tool.type === 'build';
+  return phase === 'COMBAT' && (tool.type === 'build' || tool.type === 'move');
 }
+
+/** How long a finger must rest on a tower before it is picked up to move (phones). */
+export const LONG_PRESS_MS = 420;
 
 function refreshPreview(cellId: CellId | null) {
   const ui = useUi.getState();
@@ -163,6 +168,12 @@ export function GameView() {
       last = now;
       controller.update(dt);
       edgeScrollStep(dt);
+      {
+        const t = useUi.getState().tool;
+        if (t.type === 'move' && !controller.state.towers.some((x) => x.id === t.towerId)) useUi.getState().set({ tool: { type: 'none' }, preview: null });
+        if (t.type === 'move' && toolAllowed(controller.state.phase, t)) scene.setMoveTargets(controller.moveTargets(t.towerId), t.towerId);
+        else scene.setMoveTargets(null);
+      }
       scene.frame(dt, frameMs, now);
       if (useUi.getState().introPlaying && !scene.introPlaying) useUi.getState().set({ introPlaying: false });
       // portal preview cards follow their portals (2 DOM nodes only)
@@ -211,6 +222,8 @@ export function GameView() {
 
     const onMove = (ev: PointerEvent) => {
       if (isTouch(ev)) {
+        if (moveDrag && ev.pointerId === moveDrag.pointerId) { dragMoveTo(ev.clientX, ev.clientY); return; }
+        if (longPress && (longPress.pointerId !== ev.pointerId || Math.hypot(ev.clientX - longPress.x, ev.clientY - longPress.y) > TAP_SLOP_PX)) clearLongPress();
         for (const a of gestures.move(ev.pointerId, ev.clientX, ev.clientY)) {
           if (a.type === 'pan') scene.rig.pan(a.dx, a.dy, canvas.clientHeight);
           else if (a.type === 'zoom') scene.rig.zoomBy(pinchToWheelDelta(a.factor));
@@ -236,10 +249,88 @@ export function GameView() {
       setHoverCell(hit.cellId);
     };
 
+    const cancelMove = () => {
+      pendingTouchCell = null;
+      useUi.getState().set({ tool: { type: 'none' }, preview: null });
+      scene.setPreview(null);
+      audio.play('click', { vol: 0.4 });
+    };
+    /** A successful move: drop the tool, keep the tower selected so its menu pops up at the new spot. */
+    const finishMove = (towerId: string) => {
+      pendingTouchCell = null;
+      useUi.getState().set({ tool: { type: 'none' }, preview: null, selection: { type: 'tower', id: towerId }, towerInfo: false });
+      scene.setPreview(null);
+      scene.setSelection({ type: 'tower', id: towerId });
+    };
+
+    // ---- long press → drag a tower to a new spot (touch) ---------------------------
+    // Resting a finger on a tower picks it up: the legal spots light up, the tower's footprint
+    // follows the finger, and lifting the finger puts it down (or, over an illegal spot, leaves it
+    // picked up so a tap on a green spot can still finish the move).
+    let longPress: { timer: number; pointerId: number; x: number; y: number } | null = null;
+    let moveDrag: { pointerId: number } | null = null;
+    const clearLongPress = () => { if (longPress) { clearTimeout(longPress.timer); longPress = null; } };
+    const towerAt = (x: number, y: number): string | null => {
+      const hit = scene.pick(x, y);
+      if (hit.towerId) return hit.towerId;
+      return hit.cellId ? controller.state.towers.find((t) => t.footprintCellIds.includes(hit.cellId!))?.id ?? null : null;
+    };
+    const armLongPress = (ev: PointerEvent) => {
+      clearLongPress();
+      const u = useUi.getState();
+      if (photoActive() || (u.phase !== 'PREPARE' && u.phase !== 'COMBAT') || (u.tool.type !== 'none' && u.tool.type !== 'move')) return;
+      const pointerId = ev.pointerId;
+      longPress = {
+        pointerId, x: ev.clientX, y: ev.clientY,
+        timer: window.setTimeout(() => {
+          const lp = longPress;
+          longPress = null;
+          if (!lp || !gestures.stillSingle(lp.pointerId)) return;
+          const towerId = towerAt(lp.x, lp.y);
+          if (!towerId) return;
+          gestures.cancel(lp.pointerId); // this finger now drags the tower, not the camera
+          moveDrag = { pointerId: lp.pointerId };
+          useUi.getState().set({ selection: { type: 'tower', id: towerId }, towerInfo: false });
+          scene.setSelection({ type: 'tower', id: towerId });
+          const cur = useUi.getState().tool;
+          if (cur.type !== 'move' || cur.towerId !== towerId) setTool({ type: 'move', towerId });
+          pendingTouchCell = null;
+          navigator.vibrate?.(18);
+        }, LONG_PRESS_MS),
+      };
+    };
+    const dragMoveTo = (x: number, y: number) => {
+      const cellId = scene.pick(x, y).cellId;
+      if (cellId === lastHoverCell) return;
+      pendingTouchCell = cellId;
+      setHoverCell(cellId);
+    };
+    const dropMove = () => {
+      moveDrag = null;
+      const u = useUi.getState();
+      if (u.tool.type !== 'move') return;
+      const cellId = pendingTouchCell;
+      const t = controller.state.towers.find((x) => x.id === (u.tool as { towerId: string }).towerId);
+      // lifted over the tower itself (or nowhere): nothing moved, the tower stays picked up
+      if (!cellId || !t || t.anchorCellId === cellId) { pendingTouchCell = null; setHoverCell(null); return; }
+      const p = controller.preview(u.tool, cellId);
+      if (p?.ok) {
+        if (issue({ type: 'MOVE_TOWER', towerId: t.id, anchorCellId: cellId }, p.cellIds)) finishMove(t.id);
+      } else {
+        runtime.scene?.flashIllegal(p?.cellIds ?? [cellId]);
+        audio.play('illegal');
+      }
+    };
+
     /** Primary action at a screen point (mouse left click, or a confirmed touch tap). */
     const primaryAt = (x: number, y: number, touch: boolean) => {
       const u = useUi.getState();
       const hit = scene.pick(x, y);
+      if (u.tool.type === 'move' && hit.towerId === u.tool.towerId && !(touch && pendingTouchCell) && !controller.preview(u.tool, hit.cellId)?.ok) {
+        // clicking the picked-up tower again puts it back where it was
+        cancelMove();
+        return;
+      }
       if (u.tool.type !== 'none' && toolAllowed(u.phase, u.tool)) {
         let cellId = hit.cellId;
         if (touch && pendingTouchCell && cellId !== pendingTouchCell) {
@@ -260,6 +351,12 @@ export function GameView() {
         const p = controller.preview(t, cellId);
         const cells = p?.cellIds ?? [cellId];
         let ok: boolean;
+        if (t.type === 'move') {
+          ok = issue({ type: 'MOVE_TOWER', towerId: t.towerId, anchorCellId: cellId }, cells);
+          if (ok) finishMove(t.towerId);
+          else if (touch) setHoverCell(cellId);
+          return;
+        }
         if (t.type === 'build') ok = issue({ type: 'BUILD_TOWER', kind: t.kind, anchorCellId: cellId }, cells);
         else if (t.type === 'wall') ok = issue({ type: 'PLACE_WALL', cellId }, cells);
         else if (t.type === 'trap') ok = issue({ type: 'PLACE_TRAP', cellId }, cells);
@@ -286,7 +383,7 @@ export function GameView() {
       pendingTouchCell = null;
       if (touch) setHoverCell(hit.cellId);
       if (hit.towerId) {
-        u.set({ selection: { type: 'tower', id: hit.towerId } });
+        u.set({ selection: { type: 'tower', id: hit.towerId }, towerInfo: false });
         scene.setSelection({ type: 'tower', id: hit.towerId });
       } else if (hit.wallId) {
         const w = controller.state.walls.find((x) => x.id === hit.wallId)!;
@@ -295,7 +392,7 @@ export function GameView() {
       } else if (hit.cellId) {
         const tower = controller.state.towers.find((t) => t.footprintCellIds.includes(hit.cellId!));
         const wall = controller.state.walls.find((w) => w.cellId === hit.cellId);
-        if (tower) { u.set({ selection: { type: 'tower', id: tower.id } }); scene.setSelection({ type: 'tower', id: tower.id }); }
+        if (tower) { u.set({ selection: { type: 'tower', id: tower.id }, towerInfo: false }); scene.setSelection({ type: 'tower', id: tower.id }); }
         else if (wall) { u.set({ selection: { type: 'wall', id: wall.id, cellId: wall.cellId } }); scene.setSelection({ type: 'wall', id: wall.id }); }
         else { u.set({ selection: { type: 'cell', cellId: hit.cellId } }); scene.setSelection({ type: 'cell', id: hit.cellId }); }
       } else {
@@ -313,6 +410,7 @@ export function GameView() {
         gestures.down(ev.pointerId, ev.clientX, ev.clientY, ev.timeStamp);
         canvas.setPointerCapture(ev.pointerId);
         ev.preventDefault();
+        if (gestures.pointerCount === 1 && !moveDrag) armLongPress(ev); else clearLongPress();
         return;
       }
       if (photoActive() && ev.button === 0 && !ev.shiftKey) {
@@ -338,6 +436,12 @@ export function GameView() {
     };
     const onUp = (ev: PointerEvent) => {
       if (isTouch(ev)) {
+        if (longPress?.pointerId === ev.pointerId) clearLongPress();
+        if (moveDrag && ev.pointerId === moveDrag.pointerId) {
+          if (canvas.hasPointerCapture(ev.pointerId)) canvas.releasePointerCapture(ev.pointerId);
+          dropMove();
+          return;
+        }
         const tap = gestures.up(ev.pointerId, ev.clientX, ev.clientY, ev.timeStamp);
         if (canvas.hasPointerCapture(ev.pointerId)) canvas.releasePointerCapture(ev.pointerId);
         if (tap && !photoActive()) primaryAt(tap.x, tap.y, true);
@@ -346,10 +450,17 @@ export function GameView() {
       if (photoDragging) { photoDragging = null; canvas.releasePointerCapture(ev.pointerId); return; }
       if (dragging) { dragging = null; canvas.releasePointerCapture(ev.pointerId); }
     };
-    const onCancel = (ev: PointerEvent) => { if (isTouch(ev)) gestures.cancel(ev.pointerId); else { dragging = null; photoDragging = null; } };
+    const onCancel = (ev: PointerEvent) => {
+      if (isTouch(ev)) {
+        if (longPress?.pointerId === ev.pointerId) clearLongPress();
+        if (moveDrag?.pointerId === ev.pointerId) moveDrag = null;
+        gestures.cancel(ev.pointerId);
+      } else { dragging = null; photoDragging = null; }
+    };
     // a new tool (or none) invalidates a half-confirmed touch placement
     const unsubTool = useUi.subscribe((s, prev) => {
-      if (s.tool !== prev.tool) pendingTouchCell = null;
+      if (s.tool !== prev.tool && !moveDrag) pendingTouchCell = null;
+      if (s.tool !== prev.tool && s.tool.type !== 'move') moveDrag = null;
       // a tool that the new phase does not allow (e.g. a tower tool when the wave ends) is dropped
       if (s.phase !== prev.phase && s.tool.type !== 'none' && !toolAllowed(s.phase, s.tool)) {
         s.set({ tool: { type: 'none' }, preview: null });
@@ -404,11 +515,16 @@ export function GameView() {
         else if (u.phase === 'WAVE_RESULT') issue({ type: 'CONTINUE' });
       } else if (k === 'escape') {
         if (u.tool.type !== 'none' || u.preview) { u.set({ tool: { type: 'none' }, preview: null }); scene.setPreview(null); }
-        else if (u.selection) { u.set({ selection: null }); scene.setSelection(null); }
+        else if (u.selection?.type === 'tower' && u.towerInfo) u.set({ towerInfo: false });
+        else if (u.selection) { u.set({ selection: null, towerInfo: false }); scene.setSelection(null); }
         else { const open = !u.pauseOpen; u.set({ pauseOpen: open }); if (u.phase === 'COMBAT') { controller.flags.paused = open; syncStore(); } }
       } else if (k === 'x' && u.selection?.type === 'tower' && (u.phase === 'PREPARE' || u.phase === 'COMBAT')) {
         issue({ type: 'SELL_TOWER', towerId: u.selection.id });
-        u.set({ selection: null }); scene.setSelection(null);
+        u.set({ selection: null, towerInfo: false }); scene.setSelection(null);
+      } else if (k === 'm' && u.selection?.type === 'tower' && (u.phase === 'PREPARE' || u.phase === 'COMBAT')) {
+        setTool({ type: 'move', towerId: u.selection.id });
+      } else if (k === 'i' && u.selection?.type === 'tower') {
+        u.set({ towerInfo: !u.towerInfo });
       } else if (k === 'u' && u.selection?.type === 'tower' && (u.phase === 'PREPARE' || u.phase === 'COMBAT')) {
         issue({ type: 'UPGRADE_TOWER', towerId: u.selection.id });
       }
@@ -456,6 +572,7 @@ export function GameView() {
     (window as unknown as { __sky: unknown }).__sky = { controller, scene, useUi, audio };
     return () => {
       cancelAnimationFrame(raf);
+      clearLongPress();
       if (photoActive()) exitPhoto();
       clearInterval(panKeys);
       ro.disconnect();

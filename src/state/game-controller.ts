@@ -5,7 +5,7 @@ import { STEP_SECONDS, ECONOMY, TOWER_DEFS, TRAP_DEF } from '../domain/definitio
 import { createInitialState, advanceOneTick, flightLaneCells } from '../simulation/engine';
 import { wavePreview } from '../simulation/waves';
 import { createSession, dispatch, type PrepareSession } from '../session/undo-history';
-import { executeCommand, resolveTowerFootprint } from '../commands/execute';
+import { activeRouteCells, executeCommand, resolveTowerFootprint } from '../commands/execute';
 import { computeRoutes } from '../navigation/connectivity';
 import { deriveMap, indexLevel } from '../navigation/derived-map';
 import { sampleTowerRange } from '../navigation/line-of-sight';
@@ -126,7 +126,7 @@ export class GameController implements SceneFeed {
   /** Preview an action at a cell without committing (preview → validate, Tech §6). */
   preview(tool: Tool, cellId: CellId | null): PreviewInfo | null {
     if (!cellId || tool.type === 'none') return null;
-    const key = `${tool.type}:${'kind' in tool ? tool.kind : ''}:${cellId}@${this.version}`;
+    const key = `${tool.type}:${'kind' in tool ? tool.kind : 'towerId' in tool ? tool.towerId : ''}:${cellId}@${this.version}`;
     const hit = this.previewCache.get(key);
     if (hit) return hit;
     let info: PreviewInfo;
@@ -145,6 +145,23 @@ export class GameController implements SceneFeed {
         routes: r.ok ? computeRoutes(this.level, r.state).routes : undefined,
         range: anchorOk ? sampleTowerRange(deriveMap(this.level, rangeState), virtual) : undefined,
         towerPreview: { kind: tool.kind, level: 1, anchorCellId: cellId },
+      };
+    } else if (tool.type === 'move') {
+      const t = s.towers.find((x) => x.id === tool.towerId);
+      if (!t) return null;
+      const without: GameState = { ...s, towers: s.towers.filter((x) => x.id !== t.id) };
+      const map = deriveMap(this.level, without);
+      const fp = resolveTowerFootprint(map, cellId);
+      const cells = fp.ok ? fp.cellIds : this.squareCells(cellId);
+      const r = executeCommand(this.level, s, { type: 'MOVE_TOWER', towerId: t.id, anchorCellId: cellId });
+      const virtual: Pick<TowerInstance, 'kind' | 'anchorCellId' | 'footprintCellIds' | 'level' | 'branch'> = { kind: t.kind, anchorCellId: cellId, footprintCellIds: cells, level: t.level, branch: t.branch };
+      const anchorOk = map.index.cells.has(cellId) && cells.length === 4;
+      info = {
+        tool, cellIds: cells, ok: r.ok, cost: 0,
+        message: r.ok ? `移動${TOWER_DEFS[t.kind].name}（免費）` : r.message,
+        routes: r.ok ? computeRoutes(this.level, r.state).routes : undefined,
+        range: anchorOk ? sampleTowerRange(deriveMap(this.level, r.ok ? r.state : without), virtual) : undefined,
+        towerPreview: { kind: t.kind, level: t.level, anchorCellId: cellId },
       };
     } else if (tool.type === 'trap') {
       const r = executeCommand(this.level, s, { type: 'PLACE_TRAP', cellId });
@@ -181,6 +198,32 @@ export class GameController implements SceneFeed {
     }
     this.previewCache.set(key, info);
     return info;
+  }
+
+  private moveTargetCache: { key: string; cells: Set<CellId> } | null = null;
+  /**
+   * Cells a tower could be moved onto: the union of every legal 2×2 footprint (the tower's own
+   * cells count as free). Route blocking is checked per target by the preview, not here, so this
+   * stays cheap enough to recompute on every state change.
+   */
+  moveTargets(towerId: string): Set<CellId> {
+    const key = `${towerId}@${this.version}`;
+    if (this.moveTargetCache?.key === key) return this.moveTargetCache.cells;
+    const out = new Set<CellId>();
+    const s = this.state;
+    const t = s.towers.find((x) => x.id === towerId);
+    if (t) {
+      const map = deriveMap(this.level, { ...s, towers: s.towers.filter((x) => x.id !== t.id) });
+      const blocked = s.phase === 'COMBAT' ? activeRouteCells(s) : null;
+      for (const c of this.level.cells) {
+        if (c.id === t.anchorCellId || !c.buildable || c.kind !== 'ground') continue;
+        const fp = resolveTowerFootprint(map, c.id);
+        if (!fp.ok || (blocked && fp.cellIds.some((id) => blocked.has(id)))) continue;
+        for (const id of fp.cellIds) out.add(id);
+      }
+    }
+    this.moveTargetCache = { key, cells: out };
+    return out;
   }
 
   private squareCells(anchor: CellId): CellId[] {

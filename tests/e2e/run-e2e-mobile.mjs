@@ -110,7 +110,54 @@ async function run(browser, name, device) {
   if (built.towers !== 1) fail(`${name}: second tap did not build (towers=${built.towers})`);
   if (built.sel !== 'tower') fail(`${name}: new tower not selected`);
   await page.screenshot({ path: `tests/e2e/mobile-${name}-built.png` });
-  if (!(await page.locator('.selection-panel .btn', { hasText: '升級' }).isVisible())) fail(`${name}: upgrade button not visible`);
+  // tapping a tower pops the compact action menu (not the full panel)
+  await wait(500); // spring pop-in
+  const menu = await page.evaluate(() => [...document.querySelectorAll('.tower-menu-btn')].map((b) => {
+    const r = b.getBoundingClientRect();
+    return { text: b.querySelector('.tmb-label')?.textContent ?? '', on: r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight };
+  }));
+  if (menu.map((m) => m.text).join(',') !== '升級,出售,移動,資訊') fail(`${name}: tower menu buttons ${JSON.stringify(menu)}`);
+  if (menu.some((m) => !m.on)) fail(`${name}: tower menu off-screen ${JSON.stringify(menu)}`);
+  if (await page.locator('.selection-panel').count()) fail(`${name}: full tower panel opened on tap`);
+  await page.screenshot({ path: `tests/e2e/mobile-${name}-menu.png` });
+  await page.locator('.tower-menu-btn', { hasText: '資訊' }).tap();
+  await wait(300);
+  if (!(await page.locator('.selection-panel .btn', { hasText: '升級' }).isVisible())) fail(`${name}: info panel upgrade button not visible`);
+  await page.evaluate(() => window.__sky.useUi.getState().set({ selection: null, towerInfo: false }));
+  await wait(300);
+
+  // long-press the tower, drag it onto a lit spot, lift: it moves there
+  {
+    const plan = await page.evaluate(() => {
+      const { controller: c, scene } = window.__sky;
+      const t = c.state.towers[0];
+      const head = scene.worldToScreen(scene.cellWorld(t.anchorCellId).add(scene.cellWorld(t.anchorCellId).clone().set(0.5, 0.5, 0.5)));
+      const cells = [...c.moveTargets(t.id)];
+      const ok = cells.map((id) => ({ id, p: scene.worldToScreen(scene.cellWorld(id)) }))
+        .filter(({ id, p }) => c.preview({ type: 'move', towerId: t.id }, id)?.ok && p.x > 40 && p.x < innerWidth - 40 && p.y > innerHeight * 0.2 && p.y < innerHeight * 0.68
+          && Math.hypot(p.x - head.x, p.y - head.y) > 60 && scene.pick(p.x, p.y).cellId === id);
+      return { from: [head.x, head.y], to: ok[0] ? [ok[0].p.x, ok[0].p.y] : null, id: ok[0]?.id, anchor: t.anchorCellId };
+    });
+    if (!plan.to) fail(`${name}: no on-screen move target`);
+    else {
+      const tp = (p) => [{ x: p[0], y: p[1], id: 1, radiusX: 4, radiusY: 4, force: 1 }];
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: tp(plan.from) });
+      await wait(700);
+      const picked = await page.evaluate(() => ({ tool: window.__sky.useUi.getState().tool.type, lit: document.querySelector('.hover-chip.tool')?.textContent ?? '' }));
+      if (picked.tool !== 'move') fail(`${name}: long press did not pick the tower up (${picked.tool})`);
+      for (const p of lerpPath(plan.from, plan.to, 12).slice(1)) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: tp(p) }); await wait(16); }
+      await wait(150);
+      await page.screenshot({ path: `tests/e2e/mobile-${name}-move-drag.png` });
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await wait(400);
+      const after = await page.evaluate(() => ({ anchor: window.__sky.controller.state.towers[0].anchorCellId, tool: window.__sky.useUi.getState().tool.type }));
+      if (after.anchor !== plan.id) fail(`${name}: drag-move ended at ${after.anchor}, expected ${plan.id}`);
+      if (after.tool !== 'none') fail(`${name}: move tool still active after drop`);
+      await page.screenshot({ path: `tests/e2e/mobile-${name}-moved.png` });
+    }
+    await page.evaluate(() => window.__sky.useUi.getState().set({ selection: null, towerInfo: false }));
+    await wait(300);
+  }
 
   // one-finger drag pans
   const camBefore = await page.evaluate(() => window.__sky.scene.rig.target.toArray());

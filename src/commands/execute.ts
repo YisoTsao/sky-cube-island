@@ -26,10 +26,11 @@ const MESSAGES: Record<RejectionCode, string> = {
   BRANCH_REQUIRED: '升到 Lv4 要先選一個分支',
   ON_ACTIVE_ROUTE: '戰鬥中不能把塔蓋在敵人正在走的路線上',
   NOT_A_TRAP_CELL: '陷阱只能放在可通行的平台地面（不可放在橋、入口、核心旁或建築上）',
+  SAME_POSITION: '防禦塔已經在這個位置',
 };
 
 /** Tower commands stay available during COMBAT so kill gold can be reinvested mid-wave. */
-const COMBAT_COMMANDS: ReadonlySet<GameCommand['type']> = new Set(['BUILD_TOWER', 'UPGRADE_TOWER', 'SELL_TOWER', 'SET_TARGETING']);
+const COMBAT_COMMANDS: ReadonlySet<GameCommand['type']> = new Set(['BUILD_TOWER', 'UPGRADE_TOWER', 'SELL_TOWER', 'MOVE_TOWER', 'SET_TARGETING']);
 
 export function rejectionMessage(code: RejectionCode): string { return MESSAGES[code]; }
 
@@ -59,6 +60,14 @@ export function resolveTowerFootprint(map: DerivedMap, anchorCellId: CellId): Fo
   }
   if (occupied) return { ok: false, code: 'OCCUPIED' };
   return { ok: true, cellIds: ids };
+}
+
+/**
+ * Cells enemies are walking this wave: frozen routes cannot change mid-wave, so nothing may be
+ * built on them (wall breakers plan their own route at spawn, so live enemies' paths count too).
+ */
+export function activeRouteCells(state: GameState): Set<CellId> {
+  return new Set([...Object.values(state.frozenRoutes).flat(), ...state.enemies.flatMap((e) => e.pathNodeIds)]);
 }
 
 function goldEvent(tick: number, delta: number, balance: number, reason: string): GameEvent {
@@ -155,12 +164,7 @@ function executeRaw(level: LevelDef, state: GameState, cmd: GameCommand): Comman
     case 'BUILD_TOWER': {
       const fp = resolveTowerFootprint(map, cmd.anchorCellId);
       if (!fp.ok) return reject(state, fp.code);
-      if (state.phase === 'COMBAT') {
-        // Frozen routes cannot change mid-wave, so never build on top of them.
-        // (wall breakers plan their own route at spawn, so live enemies' paths count too)
-        const onRoute = new Set([...Object.values(state.frozenRoutes).flat(), ...state.enemies.flatMap((e) => e.pathNodeIds)]);
-        if (fp.cellIds.some((id) => onRoute.has(id))) return reject(state, 'ON_ACTIVE_ROUTE');
-      }
+      if (state.phase === 'COMBAT' && fp.cellIds.some((id) => activeRouteCells(state).has(id))) return reject(state, 'ON_ACTIVE_ROUTE');
       const def = TOWER_DEFS[cmd.kind];
       if (state.gold < def.buildCost) return reject(state, 'INSUFFICIENT_GOLD');
       const tower: TowerInstance = {
@@ -203,6 +207,21 @@ function executeRaw(level: LevelDef, state: GameState, cmd: GameCommand): Comman
         { type: 'TOWER_SOLD', tick, towerId: t.id, kind: t.kind, level: t.level, anchorCellId: t.anchorCellId },
         goldEvent(tick, refund, draft.gold, 'sell'),
       ], -refund);
+    }
+    case 'MOVE_TOWER': {
+      const t = state.towers.find((x) => x.id === cmd.towerId);
+      if (!t) return reject(state, 'NOT_FOUND');
+      if (t.anchorCellId === cmd.anchorCellId) return reject(state, 'SAME_POSITION');
+      // the tower's own cells are free for the new footprint (e.g. sliding over by one cell)
+      const without: GameState = { ...state, towers: state.towers.filter((x) => x.id !== t.id) };
+      const fp = resolveTowerFootprint(deriveMap(level, without), cmd.anchorCellId);
+      if (!fp.ok) return reject(state, fp.code);
+      if (state.phase === 'COMBAT' && fp.cellIds.some((id) => activeRouteCells(state).has(id))) return reject(state, 'ON_ACTIVE_ROUTE');
+      const moved: TowerInstance = { ...t, anchorCellId: cmd.anchorCellId, footprintCellIds: fp.cellIds };
+      const draft: GameState = { ...state, towers: state.towers.map((x) => (x.id === t.id ? moved : x)) };
+      return commitWithRoutes(level, state, draft, [
+        { type: 'TOWER_MOVED', tick, towerId: t.id, kind: t.kind, fromAnchorCellId: t.anchorCellId, anchorCellId: cmd.anchorCellId },
+      ], 0);
     }
     case 'SET_TARGETING': {
       const t = state.towers.find((x) => x.id === cmd.towerId);

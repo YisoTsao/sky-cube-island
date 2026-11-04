@@ -16,6 +16,7 @@
     "e2e:mobile": "node tests/e2e/run-e2e-mobile.mjs"
   },
   "dependencies": {
+    "motion": "^12.43.0",
     "n8ao": "^2.0.1",
     "postprocessing": "^6.39.6",
     "react": "^19.3.1",
