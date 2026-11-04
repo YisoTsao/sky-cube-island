@@ -248,8 +248,10 @@ export class GameController implements SceneFeed {
     return true;
   }
   async restartFromCheckpoint(): Promise<boolean> {
-    const s = await readCheckpoint(this.level.id);
-    if (!s) return false;
+    const cp = await readCheckpoint(this.level.id);
+    if (!cp) return false;
+    // Retrying a wave always starts with a full core (endless keeps its run damage).
+    const s = this.level.endless ? cp : { ...cp, coreHp: this.level.core.maxHp };
     this.replaceState(s);
     if (this.persist) void writeSave(s);
     return true;

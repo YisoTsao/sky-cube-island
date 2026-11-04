@@ -287,7 +287,9 @@ function continueAfterResult(level: LevelDef, state: GameState): CommandResult {
   if (state.phase !== 'WAVE_RESULT') return reject(state, 'INVALID_PHASE');
   const nextIndex = state.currentWaveIndex + 1;
   if (nextIndex >= level.waves.length) return reject(state, 'INVALID_PHASE');
-  const draft: GameState = { ...state, phase: 'PREPARE', currentWaveIndex: nextIndex, frozenRoutes: {}, spawnQueue: [], spawnCursor: 0, waveTick: 0 };
+  // Campaign waves start with a fully healed core; endless runs keep their damage (scored by survival).
+  const coreHp = level.endless ? state.coreHp : level.core.maxHp;
+  const draft: GameState = { ...state, phase: 'PREPARE', currentWaveIndex: nextIndex, coreHp, frozenRoutes: {}, spawnQueue: [], spawnCursor: 0, waveTick: 0 };
   return {
     ok: true, state: draft, cost: 0,
     events: [{ type: 'PHASE_CHANGED', tick: state.tick, from: 'WAVE_RESULT', to: 'PREPARE' }],

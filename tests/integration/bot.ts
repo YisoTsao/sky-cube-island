@@ -99,6 +99,13 @@ function spend(s: GameState, o: BotOptions, level: LevelDef): GameState {
 export interface WaveReport { wave: number; seconds: number; leaks: number; leakKinds: Record<string, number>; hpAfter: number; goldAfter: number; enemies: number; towers: string }
 export interface RunReport { result: 'VICTORY' | 'DEFEAT'; coreHp: number; waves: WaveReport[] }
 
+/**
+ * Lowest core HP left after any wave. Campaign cores refill between waves, so the final HP only
+ * tells about the last wave; this is the "worst moment" of the run.
+ */
+export const lowestHp = (r: RunReport): number => Math.min(...r.waves.map((w) => w.hpAfter));
+
+
 /** Lv4 branch the bots pick: alternate by tower id so both branches see play. */
 const branchFor = (id: string): TowerBranch => (Number(id.replace(/\D/g, '')) % 2 ? 'A' : 'B');
 
