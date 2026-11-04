@@ -290,6 +290,8 @@ b.bad { color: var(--bad); }
 .modal-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .modal-actions .btn { flex: 1; }
 .modal-actions.column { flex-direction: column; }
+.restart-confirm { background: #fff1ea; border: 2px solid #f0b8a0; border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.restart-confirm-text { font-size: 14px; color: #7a3b22; line-height: 1.4; }
 .failure-box { background: #fff1ea; border: 2px solid #f0b8a0; border-radius: 10px; padding: 10px 12px; margin: 6px 0 14px; }
 .failure-label { font: 900 11px var(--font); color: #a03a20; letter-spacing: .1em; }
 .failure-text { font-weight: 700; font-size: 15px; margin-top: 2px; }
