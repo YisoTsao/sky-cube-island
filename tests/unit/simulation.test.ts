@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { level, fresh, cid } from './helpers';
 import { executeCommand } from '../../src/commands/execute';
-import { advanceOneTick } from '../../src/simulation/engine';
+import { advanceOneTick, createInitialState } from '../../src/simulation/engine';
+import { makeEndlessLevel } from '../../src/levels/endless';
 import { buildSpawnQueue } from '../../src/simulation/waves';
-import type { EnemyInstance, EnemyKind, GameCommand, GameEvent, GameState } from '../../src/domain/types';
+import type { EnemyInstance, EnemyKind, GameCommand, GameEvent, GameState, LevelDef } from '../../src/domain/types';
 import { ENEMY_DEFS, waveHpMultiplier } from '../../src/domain/definitions';
 
 function apply(s: GameState, cmds: GameCommand[]): GameState {
@@ -56,6 +57,21 @@ describe('Waves (D21-07)', () => {
   });
 });
 
+describe('Core refill between waves', () => {
+  const afterHit = (l: LevelDef): GameState => ({ ...createInitialState(l), phase: 'WAVE_RESULT', coreHp: 3 });
+  it('a campaign core is full again when the next wave\'s prepare starts', () => {
+    const r = executeCommand(level, afterHit(level), { type: 'CONTINUE' });
+    expect(r.ok).toBe(true);
+    expect(r.state.phase).toBe('PREPARE');
+    expect(r.state.coreHp).toBe(level.core.maxHp);
+  });
+  it('an endless run keeps its damage', () => {
+    const endless = makeEndlessLevel(level);
+    const r = executeCommand(endless, afterHit(endless), { type: 'CONTINUE' });
+    expect(r.state.coreHp).toBe(3);
+  });
+});
+
 describe('Simulation (Tech §8, §12.3)', () => {
   it('undefended wave 1 overruns the core; no gold for leaks', () => {
     const { state, events } = runWave(fresh());
@@ -105,7 +121,7 @@ describe('Simulation (Tech §8, §12.3)', () => {
   });
   it('golem takes 20% less physical damage', () => {
     let s = apply({ ...fresh(), gold: 5000, coreHp: 9999 }, [{ type: 'BUILD_TOWER', kind: 'arrow', anchorCellId: cid(14, 13) }]);
-    for (let w = 0; w < 1; w++) { s = runWave(s).state; s = executeCommand(level, s, { type: 'CONTINUE' }).state; }
+    for (let w = 0; w < 1; w++) { s = runWave(s).state; s = { ...executeCommand(level, s, { type: 'CONTINUE' }).state, coreHp: 9999 }; }
     const { events } = runWave(s);
     const golemIds = new Set(events.filter((e) => e.type === 'ENEMY_SPAWNED' && e.kind === 'golem').map((e) => (e as { enemyId: string }).enemyId));
     const hits = events.filter((e): e is Extract<GameEvent, { type: 'ENEMY_DAMAGED' }> => e.type === 'ENEMY_DAMAGED' && golemIds.has(e.enemyId));
