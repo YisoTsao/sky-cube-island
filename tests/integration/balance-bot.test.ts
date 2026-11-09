@@ -24,10 +24,11 @@ function log(name: string, r: RunReport) {
 }
 
 describe('L1-01 balance (bots)', () => {
-  it.each(['active', 'activeB'])('%s player wins, but not untouched', (name) => {
+  // v2.11: L1-01 is the tutorial island and the player asked for an easier campaign, so a good
+  // active defence may now finish it untouched; it must still win.
+  it.each(['active', 'activeB'])('%s player wins', (name) => {
     const r = run(name); log(name, r);
     expect(r.result).toBe('VICTORY');
-    expect(lowestHp(r)).toBeLessThan(20);
     for (const w of r.waves) {
       expect(w.seconds, `wave ${w.wave}`).toBeGreaterThanOrEqual(120);
       expect(w.enemies, `wave ${w.wave}`).toBeGreaterThanOrEqual(90);
@@ -36,8 +37,8 @@ describe('L1-01 balance (bots)', () => {
   it.each(['prepOnly', 'sloppy'])('%s player loses or bleeds', (name) => {
     const r = run(name); log(name, r);
     // The core refills between waves, so a weak defence may limp through; it must still lose or
-    // have at least one wave that costs half the core.
-    expect(r.result === 'DEFEAT' || lowestHp(r) <= 10, `${r.result}, lowest ${lowestHp(r)}`).toBe(true);
+    // take real damage (v2.11: the tutorial island no longer demands half the core).
+    expect(r.result === 'DEFEAT' || lowestHp(r) <= 15, `${r.result}, lowest ${lowestHp(r)}`).toBe(true);
     // ...but survives the opening waves, so the loss comes from the late-game pressure.
     expect(r.waves.length).toBeGreaterThanOrEqual(3);
   }, 120_000);

@@ -108,10 +108,10 @@ describe('Lv4 branches (v2.9)', () => {
     return { s, events, seen };
   }
 
-  it('saves keep the level and branch, and Lv4 costs 1.8× the build cost', () => {
+  it('saves keep the level and branch, and Lv4 costs 1.5× the build cost', () => {
     const s = lv4('arrow', 'B');
     expect(GameStateSchema.parse(s).towers[0]!.branch).toBe('B');
-    expect(upgradeCost('arrow', 4)).toBe(Math.ceil(TOWER_DEFS.arrow.buildCost * 1.8));
+    expect(upgradeCost('arrow', 4)).toBe(Math.ceil(TOWER_DEFS.arrow.buildCost * 1.5));
   });
 
   it('Lv5 masters the chosen branch: no new choice, keeps the branch, stronger, then maxed', () => {

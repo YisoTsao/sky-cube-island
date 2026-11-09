@@ -105,6 +105,7 @@ kbd {
 .btn.ghost { background: rgba(255, 255, 255, .55); box-shadow: 0 3px 0 rgba(62, 38, 21, .6); }
 .btn.big { padding: 13px 26px; font-size: 18px; }
 .btn-cost { display: inline-flex; align-items: center; gap: 2px; font-size: 13px; padding: 2px 6px; border-radius: 7px; background: rgba(0, 0, 0, .12); }
+.btn-short { display: block; width: 100%; font-size: 11px; font-weight: 700; color: #c0392b; margin-top: 2px; }
 .btn.start {
   padding: 14px 26px; font-size: 20px; font-weight: 900; letter-spacing: .04em;
   background: linear-gradient(180deg, #ffe17a, #f2a93c); border-color: #7a4a0e; color: #4a2a00;
