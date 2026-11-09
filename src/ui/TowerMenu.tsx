@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactElement } from 'react';
 import { AnimatePresence, MotionConfig, motion } from 'motion/react';
-import { MAX_TOWER_LEVEL, TOWER_DEFS, nextTowerLevel, sellRefund, upgradeCost } from '../domain/definitions';
+import { BRANCH_LEVEL, TOWER_DEFS, nextTowerLevel, sellRefund, upgradeCost } from '../domain/definitions';
 import { controller, runtime } from '../app/runtime';
 import { useUi } from '../state/store';
 import { audio } from '../audio/audio';
@@ -79,10 +79,10 @@ export function TowerMenu(): ReactElement {
   if (tower) {
     const next = nextTowerLevel(tower.level);
     const cost = next ? upgradeCost(tower.kind, next) : 0;
-    const branch = next === MAX_TOWER_LEVEL;
+    const branch = next === BRANCH_LEVEL;
     items = [
       {
-        key: 'upgrade', label: !next ? '滿級' : branch ? '進化' : '升級', icon: <UpgradeIcon />, tone: 'up', hotkey: 'U',
+        key: 'upgrade', label: !next ? '滿級' : '升級', icon: <UpgradeIcon />, tone: 'up', hotkey: 'U',
         badge: next ? <><CoinIcon size={12} />{cost}</> : undefined,
         disabled: !actions || !next || controller.state.gold < cost,
         // Lv3 → Lv4 is a choice between two branches, which needs the full panel's cards

@@ -92,7 +92,6 @@ describe('Lv4 branches (v2.9)', () => {
     expect(r.state.towers[0]!.level).toBe(4);
     expect(r.state.towers[0]!.branch).toBe(branch);
     expect(r.state.gold).toBe(s.gold - upgradeCost(kind, 4));
-    expect(executeCommand(level, r.state, { type: 'UPGRADE_TOWER', towerId: id, branch }).ok).toBe(false);
     return r.state;
   }
   /** Enemies are kept alive (huge HP) so on-hit effects have survivors to land on. */
@@ -113,6 +112,25 @@ describe('Lv4 branches (v2.9)', () => {
     const s = lv4('arrow', 'B');
     expect(GameStateSchema.parse(s).towers[0]!.branch).toBe('B');
     expect(upgradeCost('arrow', 4)).toBe(Math.ceil(TOWER_DEFS.arrow.buildCost * 1.8));
+  });
+
+  it('Lv5 masters the chosen branch: no new choice, keeps the branch, stronger, then maxed', () => {
+    const s = lv4('cannon', 'B');
+    const id = s.towers[0]!.id;
+    const r = executeCommand(level, s, { type: 'UPGRADE_TOWER', towerId: id });
+    if (!r.ok) throw new Error(r.message);
+    const t = r.state.towers[0]!;
+    expect(t.level).toBe(5);
+    expect(t.branch).toBe('B');
+    expect(r.state.gold).toBe(s.gold - upgradeCost('cannon', 5));
+    expect(GameStateSchema.parse(r.state).towers[0]!.level).toBe(5);
+    for (const k of TOWER_KINDS) for (const b of TOWER_BRANCHES) {
+      expect(towerStats(k, 5, b).damage).toBeCloseTo(towerStats(k, 4, b).damage * 1.3);
+      expect(effectiveRange(k, 5, 0, 0, b)).toBeCloseTo(effectiveRange(k, 4, 0, 0, b) + 0.3);
+    }
+    const again = executeCommand(level, r.state, { type: 'UPGRADE_TOWER', towerId: id });
+    expect(again.ok).toBe(false);
+    if (!again.ok) expect(again.code).toBe('MAX_LEVEL');
   });
 
   it('branch stats differ from each other and from Lv3', () => {

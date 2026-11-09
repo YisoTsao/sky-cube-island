@@ -30,6 +30,15 @@ function stoneBase(m: VoxelModel, h: number, inset = 3) {
   }
 }
 
+/** Lv5 mastery: a gold band around the foot and gold corner studs, on every tower kind. */
+function masteryTrim(m: VoxelModel, level: TowerLevel): VoxelModel {
+  if (level < 5) return m;
+  m.box(1, 0, 1, 30, 0, 1, 'gold'); m.box(1, 0, 30, 30, 0, 30, 'gold');
+  m.box(1, 0, 1, 1, 0, 30, 'gold'); m.box(30, 0, 1, 30, 0, 30, 'gold');
+  for (const [x, z] of [[1, 1], [30, 1], [1, 30], [30, 30]] as const) m.box(x, 1, z, x, 2, z, 'gold');
+  return m;
+}
+
 function arrowTower(level: TowerLevel, branch?: TowerBranch): TowerParts {
   const body = new VoxelModel(32, 36, 32);
   if (level >= 2) stoneBase(body, 5, 2);
@@ -105,7 +114,7 @@ function arrowTower(level: TowerLevel, branch?: TowerBranch): TowerParts {
     head.box(9, 4, 8, 10, 4, 8, 'ironLight');
   }
   return {
-    body: body.build(V),
+    body: masteryTrim(body, level).build(V),
     head: head.build(V, { originY: -2.5 * V }),
     cloth: cloth?.build(V),
     headY: 1.6,
@@ -156,7 +165,7 @@ function frostTower(level: TowerLevel, branch?: TowerBranch): TowerParts {
     }
   }
   return {
-    body: body.build(V),
+    body: masteryTrim(body, level).build(V),
     glow: glow.build(V, { flags: FLAG_EMISSIVE }),
     head: head.build(V, { originY: -4.5 * V, flags: FLAG_EMISSIVE }),
     headY: 1.4,
@@ -214,7 +223,7 @@ function cannonTower(level: TowerLevel, branch?: TowerBranch): TowerParts {
     head.set(bx, 5, 24, null); head.set(bx + 1, 5, 24, null);
   }
   return {
-    body: body.build(V),
+    body: masteryTrim(body, level).build(V),
     head: head.build(V, { originY: -5 * V }),
     glow: glow?.build(V, { flags: FLAG_EMISSIVE }),
     headY: 1.1,
@@ -260,7 +269,7 @@ function lightningTower(level: TowerLevel, branch?: TowerBranch): TowerParts {
   head.sphere(7, 7, 7, overload ? 4.4 : level >= 2 ? 3.6 : 3.1, overload ? 'voltDeep' : 'volt');
   head.sphere(7, 7, 7, overload ? 2.4 : 1.8, 'white');
   return {
-    body: body.build(V),
+    body: masteryTrim(body, level).build(V),
     glow: glow.build(V, { flags: FLAG_EMISSIVE }),
     head: head.build(V, { originY: -7 * V, flags: FLAG_EMISSIVE }),
     headY: 1.7,
@@ -324,7 +333,7 @@ function windTower(level: TowerLevel, branch?: TowerBranch): TowerParts {
   const headGeo = head.build(V, { originY: -c * V - V / 2 });
   headGeo.translate(0, 0, 0.18);
   return {
-    body: body.build(V),
+    body: masteryTrim(body, level).build(V),
     head: headGeo,
     cloth: cloth?.build(V),
     headY: 1.5,

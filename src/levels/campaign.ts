@@ -17,14 +17,14 @@ export const CHAPTERS: ChapterDef[] = [
 
 export const GENERATED_SPECS: GeneratedLevelSpec[] = [
   {
-    id: 'L1-05', name: '雲端前哨', subtitle: '飛龍初現・陷阱與拆橋教學', theme: 'day', weather: 'rain', seed: 1501, initialGold: 460,
+    id: 'L1-05', name: '雲端前哨', subtitle: '飛龍初現・陷阱與拆橋教學', theme: 'day', weather: 'rain', seed: 1501, initialGold: 500,
     layout: { sides: ['N', 'W', 'E'], hubs: ['N'], doubleBridge: ['N'], corners: ['NW', 'NE'], coreElevation: 3, pillars: 2 },
-    plan: { roster: ['slime', 'runner', 'mini', 'wyvern', 'knight', 'boar', 'wisp'], finalBoss: 'boss', waves: 6, density: 0.85, hp: [0.6, 1.15] },
+    plan: { roster: ['slime', 'runner', 'mini', 'wyvern', 'knight', 'boar', 'wisp'], finalBoss: 'boss', waves: 6, density: 0.8, hp: [0.6, 1.05] },
   },
   {
     id: 'L2-01', name: '角獸草原', subtitle: '破牆角獸・木牆擋不住的敵人', theme: 'day', seed: 2103, initialGold: 440,
     layout: { sides: ['N', 'S', 'W'], hubs: ['S'], doubleBridge: ['S'], corners: ['NW', 'SW'], coreElevation: 2, pillars: 2 },
-    plan: { roster: ['slime', 'runner', 'ram', 'bat', 'wyvern', 'splitter', 'boar'], finalBoss: 'queen', waves: 6, density: 1.8, hp: [0.7, 1.75] },
+    plan: { roster: ['slime', 'runner', 'ram', 'bat', 'wyvern', 'splitter', 'boar'], finalBoss: 'queen', waves: 6, density: 1.8, hp: [0.7, 1.9] },
   },
   {
     id: 'L2-02', name: '雙峰吊橋', subtitle: '兩條長橋・拆一座逼敵人繞遠路', theme: 'dusk', weather: 'fog', seed: 2202, initialGold: 460,

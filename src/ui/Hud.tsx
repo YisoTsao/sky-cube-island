@@ -3,7 +3,7 @@ import type { EnemyKind, TargetingMode, TowerBranch, TowerKind, TowerLevel } fro
 import { TOWER_BRANCHES } from '../domain/types';
 import { TARGETING_MODES, TOWER_KINDS } from '../domain/types';
 import {
-  BRANCH_DEFS, ECONOMY, ENEMY_DEFS, TRAP_DEF, HIGH_GROUND_PER_LEVEL, MAX_TOWER_LEVEL, levelRangeBonus, TOWER_DEFS, highGroundBonus, nextTowerLevel, sellRefund, towerStats, upgradeCost,
+  BRANCH_DEFS, ECONOMY, ENEMY_DEFS, TRAP_DEF, HIGH_GROUND_PER_LEVEL, BRANCH_LEVEL, MAX_TOWER_LEVEL, levelRangeBonus, TOWER_DEFS, highGroundBonus, nextTowerLevel, sellRefund, towerStats, upgradeCost,
 } from '../domain/definitions';
 import { controller, level, runtime, syncStore } from '../app/runtime';
 import { executeCommand } from '../commands/execute';
@@ -37,6 +37,7 @@ const TOWER_BLURB: Record<TowerKind, string> = {
 };
 
 function towerSpecial(kind: TowerKind, lv: TowerLevel = 1, branch?: TowerBranch): string | null {
+  if (lv >= 5) return `${BRANCH_DEFS[kind][branch ?? 'A'].blurb} · 精通：傷害 ×1.3、射程 +0.3`;
   if (lv >= 4) return BRANCH_DEFS[kind][branch ?? 'A'].blurb;
   const st = towerStats(kind, lv);
   if (st.chainJumps !== undefined) return `連鎖 ${st.chainJumps} 次`;
@@ -294,8 +295,8 @@ function SelectionPanel() {
     const nextLevel = nextTowerLevel(t.level);
     const upCost = nextLevel ? upgradeCost(t.kind, nextLevel) : 0;
     // Lv3 → Lv4 is a choice between two branches, shown as cards instead of a single preview
-    const choosing = nextLevel === MAX_TOWER_LEVEL;
-    const next = nextLevel && !choosing ? { dmg: Math.round(towerStats(t.kind, nextLevel).damage), range: def.baseRangeWorld + levelRangeBonus(nextLevel), special: towerSpecial(t.kind, nextLevel) } : null;
+    const choosing = nextLevel === BRANCH_LEVEL;
+    const next = nextLevel && !choosing ? { dmg: Math.round(towerStats(t.kind, nextLevel, t.branch).damage), range: def.baseRangeWorld + levelRangeBonus(nextLevel, t.kind, t.branch), special: towerSpecial(t.kind, nextLevel, t.branch) } : null;
     const special = towerSpecial(t.kind, t.level, t.branch);
     const hgMax = highGroundBonus(elev);
     const cells = controller.rangeForTower(t.id);
@@ -351,7 +352,7 @@ function SelectionPanel() {
           <div className="sel-actions">
             {choosing ? null : nextLevel ? (
               <button className="btn primary" disabled={controller.state.gold < upCost} onClick={() => issue({ type: 'UPGRADE_TOWER', towerId: t.id })}>
-                升級 <span className="btn-cost"><CoinIcon size={14} />{upCost}</span>
+                升級 Lv.{nextLevel} <span className="btn-cost"><CoinIcon size={14} />{upCost}</span>
               </button>
             ) : <button className="btn" disabled>已滿級</button>}
             <button className="btn" onClick={() => startTowerMove(t.id)} title="移動（M）">移動</button>

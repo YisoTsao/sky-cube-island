@@ -121,7 +121,7 @@ export const ENEMY_DEFS: Record<EnemyKind, EnemyDef> = {
  * keeps its difficulty. It ramps from +0% on the first wave to the full bonus by the sixth (or the
  * last) wave, because upgrades only exist later in a level: the opening waves stay as they were.
  */
-export const LATE_WAVE_HP_BONUS = 0.28;
+export const LATE_WAVE_HP_BONUS = 0.2;
 
 export function waveHpMultiplier(waveIndex: number, waveCount: number): number {
   const ramp = Math.max(1, Math.min(waveCount - 1, 5));
@@ -144,16 +144,20 @@ export const ECONOMY = {
   maxUndo: 20,
 } as const;
 
-/** Highest tower level. Lv4 is a choice of two specialisations (`BRANCH_DEFS`). */
-export const MAX_TOWER_LEVEL = 4;
-export const TOWER_LEVELS: readonly TowerLevel[] = [1, 2, 3, 4];
+/** Highest tower level. Lv4 is a choice of two specialisations (`BRANCH_DEFS`); Lv5 masters it. */
+export const MAX_TOWER_LEVEL = 5;
+/** The level where the player picks a branch. */
+export const BRANCH_LEVEL = 4;
+export const TOWER_LEVELS: readonly TowerLevel[] = [1, 2, 3, 4, 5];
+/** Lv5 mastery (v2.10): the chosen branch hits harder and reaches further. */
+export const MASTERY = { damageMult: 1.3, rangeBonus: 0.3 } as const;
 
 /** Level multipliers relative to Lv1 (GDD §7; v2.8 raised 1.3/1.7 → 1.45/2.0 so upgrading pays).
  *  Lv4 damage comes from the chosen branch. */
-export const LEVEL_DAMAGE_MULT: Record<TowerLevel, number> = { 1: 1, 2: 1.45, 3: 2.0, 4: 2.0 };
-export const LEVEL_RANGE_BONUS: Record<TowerLevel, number> = { 1: 0, 2: 0.2, 3: 0.4, 4: 0.6 };
-/** Upgrade cost into each level, as a fraction of the build cost. */
-const UPGRADE_COST_RATIO: Partial<Record<TowerLevel, number>> = { 2: 0.7, 3: 1.1, 4: 1.8 };
+export const LEVEL_DAMAGE_MULT: Record<TowerLevel, number> = { 1: 1, 2: 1.45, 3: 2.0, 4: 2.0, 5: 2.0 };
+export const LEVEL_RANGE_BONUS: Record<TowerLevel, number> = { 1: 0, 2: 0.2, 3: 0.4, 4: 0.6, 5: 0.6 };
+/** Upgrade cost into each level, as a fraction of the build cost (v2.10: Lv5 added). */
+const UPGRADE_COST_RATIO: Partial<Record<TowerLevel, number>> = { 2: 0.7, 3: 1.1, 4: 1.8, 5: 2.4 };
 
 export function nextTowerLevel(level: TowerLevel): TowerLevel | null {
   return level < MAX_TOWER_LEVEL ? ((level + 1) as TowerLevel) : null;
@@ -262,6 +266,7 @@ export function towerStats(kind: TowerKind, level: TowerLevel, branch?: TowerBra
   if (b.chainFalloff !== undefined) out.chainFalloff = b.chainFalloff;
   if (b.knockbackCells !== undefined) out.knockbackCells = b.knockbackCells;
   if (b.knockbackTargets !== undefined) out.knockbackTargets = b.knockbackTargets;
+  if (level >= 5) { out.damage *= MASTERY.damageMult; out.rangeBonus += MASTERY.rangeBonus; }
   for (const k of ['armorPierce', 'flyerBonus', 'freeze', 'splash', 'stunTicks', 'shred', 'disruptTicks', 'gustSlow'] as const) {
     if (b[k] !== undefined) (out as unknown as Record<string, unknown>)[k] = b[k];
   }
@@ -270,7 +275,7 @@ export function towerStats(kind: TowerKind, level: TowerLevel, branch?: TowerBra
 
 /** Range bonus from the tower's level (and Lv4 branch). */
 export function levelRangeBonus(level: TowerLevel, kind?: TowerKind, branch?: TowerBranch): number {
-  if (level === 4 && kind) return BRANCH_DEFS[kind][branch ?? 'A'].rangeBonus ?? LEVEL_RANGE_BONUS[4];
+  if (level >= 4 && kind) return (BRANCH_DEFS[kind][branch ?? 'A'].rangeBonus ?? LEVEL_RANGE_BONUS[4]) + (level >= 5 ? MASTERY.rangeBonus : 0);
   return LEVEL_RANGE_BONUS[level];
 }
 

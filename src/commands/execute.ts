@@ -2,7 +2,7 @@ import type {
   CellId, CommandResult, Elevation, GameCommand, GameEvent, GameState, LevelDef, RejectionCode, TowerInstance, TowerKind,
 } from '../domain/types';
 import { MAX_ELEVATION, MIN_ELEVATION } from '../domain/types';
-import { ECONOMY, MAX_TOWER_LEVEL, TOWER_DEFS, TRAP_DEF, nextTowerLevel, sellRefund, upgradeCost } from '../domain/definitions';
+import { BRANCH_LEVEL, ECONOMY, TOWER_DEFS, TRAP_DEF, nextTowerLevel, sellRefund, upgradeCost } from '../domain/definitions';
 import { deriveMap, type DerivedMap } from '../navigation/derived-map';
 import { computeRoutes } from '../navigation/connectivity';
 import { buildSpawnQueue } from '../simulation/waves';
@@ -185,10 +185,10 @@ function executeRaw(level: LevelDef, state: GameState, cmd: GameCommand): Comman
       if (!t) return reject(state, 'NOT_FOUND');
       const to = nextTowerLevel(t.level);
       if (!to) return reject(state, 'MAX_LEVEL');
-      if (to === MAX_TOWER_LEVEL && !cmd.branch) return reject(state, 'BRANCH_REQUIRED');
+      if (to === BRANCH_LEVEL && !cmd.branch) return reject(state, 'BRANCH_REQUIRED');
       const cost = upgradeCost(t.kind, to);
       if (state.gold < cost) return reject(state, 'INSUFFICIENT_GOLD');
-      const upgraded: TowerInstance = { ...t, level: to, investedGold: t.investedGold + cost, ...(to === MAX_TOWER_LEVEL ? { branch: cmd.branch } : {}) };
+      const upgraded: TowerInstance = { ...t, level: to, investedGold: t.investedGold + cost, ...(to === BRANCH_LEVEL ? { branch: cmd.branch } : {}) };
       const draft: GameState = { ...state, gold: state.gold - cost, towers: state.towers.map((x) => (x.id === t.id ? upgraded : x)) };
       return {
         ok: true, state: draft, cost,

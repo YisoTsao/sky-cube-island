@@ -194,7 +194,7 @@ export interface TrapInstance { id: string; cellId: CellId; cooldownTicks: numbe
 
 export type GamePhase = 'MENU' | 'PREPARE' | 'COMBAT' | 'WAVE_RESULT' | 'VICTORY' | 'DEFEAT';
 
-export type TowerLevel = 1 | 2 | 3 | 4;
+export type TowerLevel = 1 | 2 | 3 | 4 | 5;
 /** Lv4 specialisation, chosen when upgrading from Lv3 (v2.9). */
 export type TowerBranch = 'A' | 'B';
 export const TOWER_BRANCHES: readonly TowerBranch[] = ['A', 'B'];
@@ -205,7 +205,7 @@ export interface TowerInstance {
   anchorCellId: CellId;
   footprintCellIds: CellId[];
   level: TowerLevel;
-  /** Lv4 only: which specialisation was chosen. */
+  /** Lv4 and Lv5: which specialisation was chosen. */
   branch?: TowerBranch;
   cooldownTicks: number;
   investedGold: number;
