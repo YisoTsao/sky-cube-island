@@ -19,7 +19,7 @@ export const GENERATED_SPECS: GeneratedLevelSpec[] = [
   {
     id: 'L1-05', name: '雲端前哨', subtitle: '飛龍初現・陷阱與拆橋教學', theme: 'day', weather: 'rain', seed: 1501, initialGold: 500,
     layout: { sides: ['N', 'W', 'E'], hubs: ['N'], doubleBridge: ['N'], corners: ['NW', 'NE'], coreElevation: 3, pillars: 2 },
-    plan: { roster: ['slime', 'runner', 'mini', 'wyvern', 'knight', 'boar', 'wisp'], finalBoss: 'boss', waves: 6, density: 0.8, hp: [0.6, 1.05] },
+    plan: { roster: ['slime', 'runner', 'mini', 'wyvern', 'knight', 'boar', 'wisp'], finalBoss: 'boss', waves: 6, density: 0.8, hp: [0.6, 1.0] },
   },
   {
     id: 'L2-01', name: '角獸草原', subtitle: '破牆角獸・木牆擋不住的敵人', theme: 'day', seed: 2103, initialGold: 440,

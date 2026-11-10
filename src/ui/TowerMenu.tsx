@@ -83,7 +83,8 @@ export function TowerMenu(): ReactElement {
     items = [
       {
         key: 'upgrade', label: !next ? '滿級' : '升級', icon: <UpgradeIcon />, tone: 'up', hotkey: 'U',
-        badge: next ? <><CoinIcon size={12} />{cost}</> : undefined,
+        // short of gold: say how much is missing instead of leaving a silent grey button
+        badge: next ? (controller.state.gold < cost ? `還差 ${cost - controller.state.gold}` : <><CoinIcon size={12} />{cost}</>) : undefined,
         disabled: !actions || !next || controller.state.gold < cost,
         // Lv3 → Lv4 is a choice between two branches, which needs the full panel's cards
         onClick: () => (branch ? openTowerInfo() : issue({ type: 'UPGRADE_TOWER', towerId: tower.id })),

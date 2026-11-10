@@ -334,7 +334,7 @@ function SelectionPanel() {
         {blocked > 0 && <div className="sel-note warn">◐ {blocked} 格被地形擋住視線（顯示為斜線）</div>}
         {towersOpen && choosing && (
           <div className="sel-branches" role="group" aria-label="Lv4 分支">
-            <div className="sel-branches-head">升到 Lv4，二選一 <span className="btn-cost"><CoinIcon size={14} />{upCost}</span></div>
+            <div className="sel-branches-head">升到 Lv4，二選一 <span className="btn-cost"><CoinIcon size={14} />{upCost}</span>{controller.state.gold < upCost && <span className="btn-short">還差 {upCost - controller.state.gold}</span>}</div>
             {TOWER_BRANCHES.map((b) => {
               const bd = BRANCH_DEFS[t.kind][b];
               return (
@@ -353,6 +353,7 @@ function SelectionPanel() {
             {choosing ? null : nextLevel ? (
               <button className="btn primary" disabled={controller.state.gold < upCost} onClick={() => issue({ type: 'UPGRADE_TOWER', towerId: t.id })}>
                 升級 Lv.{nextLevel} <span className="btn-cost"><CoinIcon size={14} />{upCost}</span>
+                {controller.state.gold < upCost && <span className="btn-short">還差 {upCost - controller.state.gold}</span>}
               </button>
             ) : <button className="btn" disabled>已滿級</button>}
             <button className="btn" onClick={() => startTowerMove(t.id)} title="移動（M）">移動</button>

@@ -156,8 +156,8 @@ export const MASTERY = { damageMult: 1.3, rangeBonus: 0.3 } as const;
  *  Lv4 damage comes from the chosen branch. */
 export const LEVEL_DAMAGE_MULT: Record<TowerLevel, number> = { 1: 1, 2: 1.45, 3: 2.0, 4: 2.0, 5: 2.0 };
 export const LEVEL_RANGE_BONUS: Record<TowerLevel, number> = { 1: 0, 2: 0.2, 3: 0.4, 4: 0.6, 5: 0.6 };
-/** Upgrade cost into each level, as a fraction of the build cost (v2.10: Lv5 added). */
-const UPGRADE_COST_RATIO: Partial<Record<TowerLevel, number>> = { 2: 0.7, 3: 1.1, 4: 1.8, 5: 2.4 };
+/** Upgrade cost into each level, as a fraction of the build cost (v2.11: Lv4 1.8 → 1.5, Lv5 2.4 → 2.0). */
+const UPGRADE_COST_RATIO: Partial<Record<TowerLevel, number>> = { 2: 0.7, 3: 1.1, 4: 1.5, 5: 2.0 };
 
 export function nextTowerLevel(level: TowerLevel): TowerLevel | null {
   return level < MAX_TOWER_LEVEL ? ((level + 1) as TowerLevel) : null;

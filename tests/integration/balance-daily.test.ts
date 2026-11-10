@@ -23,7 +23,8 @@ describe('daily challenge balance (bots)', () => {
       if (p.result === 'VICTORY') prepWins++;
     }
     expect(wins).toBeGreaterThanOrEqual(6);
-    expect(prepWins).toBeLessThanOrEqual(5);
+    // v2.11 cheaper Lv4/Lv5 made every mode easier; prep-only still wins less often than a good defence
+    expect(prepWins).toBeLessThanOrEqual(7);
     expect(prepWins).toBeLessThan(wins);
   }, 900_000);
 });
